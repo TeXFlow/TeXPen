@@ -1,0 +1,5 @@
+{
+  "name": "InkTeX",
+  "description": "A glassy, liquid-style handwriting to LaTeX converter using On-Device AI.",
+  "requestFramePermissions": []
+}

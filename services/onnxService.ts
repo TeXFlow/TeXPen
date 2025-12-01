@@ -2,10 +2,12 @@ import * as ort from 'onnxruntime-web';
 import { ModelConfig } from '../types';
 import { getModelFromCache, storeModelInCache } from './cacheService';
 
-// Configure ONNX Runtime Web
+// 1. Setup ONNX Runtime Env
 ort.env.wasm.wasmPaths = '/';
-ort.env.wasm.numThreads = 4;
+ort.env.wasm.numThreads = 4; 
+ort.env.wasm.proxy = false;
 
+// 2. Global Sessions
 let encoderSession: ort.InferenceSession | null = null;
 let decoderSession: ort.InferenceSession | null = null;
 
@@ -19,22 +21,25 @@ interface Tokenizer {
 let tokenizer: Tokenizer | null = null;
 let reverseTokenizer: { [id: number]: string } = {};
 
+// 3. EXACT CONFIGURATION FROM JSON FILES
 export const DEFAULT_CONFIG: ModelConfig = {
   encoderModelUrl: 'https://huggingface.co/OleehyO/TexTeller/resolve/main/encoder_model.onnx',
   decoderModelUrl: 'https://huggingface.co/OleehyO/TexTeller/resolve/main/decoder_model_merged.onnx',
   tokenizerUrl: 'https://huggingface.co/OleehyO/TexTeller/resolve/main/tokenizer.json',
-  imageSize: 384,
+  
+  // CRITICAL: Updated based on config.json and preprocessor_config.json
+  imageSize: 448, 
+  mean: [0.9545467], 
+  std: [0.15394445],
+  
   encoderInputName: 'pixel_values',
   decoderInputName: 'input_ids',
   decoderOutputName: 'logits',
-  // Model expects 1 channel, so we only need 1 mean/std value, but keeping structure is fine
-  mean: [0.5], 
-  std: [0.5],
   invert: false,
   eosToken: '</s>',
   bosToken: '<s>',
   padToken: '<pad>',
-  preferredProvider: 'wasm' // Stick to WASM for stability given the strict kernel checks
+  preferredProvider: 'wasm' 
 };
 
 export const initModel = async (
@@ -42,7 +47,7 @@ export const initModel = async (
   onProgress?: (phase: string, progress: number) => void
 ): Promise<void> => {
   try {
-    // 1. Load Tokenizer
+    // --- Load Tokenizer ---
     if (onProgress) onProgress('Loading Tokenizer', 0);
     const cachedTokenizer = localStorage.getItem('tokenizer');
     if (cachedTokenizer) {
@@ -62,13 +67,13 @@ export const initModel = async (
     }
     if (onProgress) onProgress('Loading Tokenizer', 100);
 
-    // 2. Load Models
+    // --- Load Models ---
     const options: ort.InferenceSession.SessionOptions = {
-      executionProviders: [config.preferredProvider, 'wasm'], 
+      executionProviders: [config.preferredProvider, 'wasm'],
       graphOptimizationLevel: 'all',
     };
 
-    console.log(`Loading models...`);
+    console.log(`Loading models (Image Size: ${config.imageSize})...`);
     if (onProgress) onProgress('Loading Models', 0);
 
     const [encoderData, decoderData] = await Promise.all([
@@ -84,8 +89,9 @@ export const initModel = async (
     encoderSession = newEncoderSession;
     decoderSession = newDecoderSession;
 
-    console.log('Models Loaded!');
+    console.log('Models Loaded. Ready for Inference.');
     if (onProgress) onProgress('Ready', 100);
+
   } catch (e) {
     console.error("Failed to load models:", e);
     throw e;
@@ -101,7 +107,7 @@ export const runInference = async (
   }
 
   try {
-    // 1. Preprocess (Converts to 1-Channel Grayscale Tensor)
+    // 1. Preprocess (Grayscale, 448x448, Specific Mean/Std)
     const pixelValues = await preprocessImage(image, config);
 
     // 2. Run Encoder
@@ -109,11 +115,16 @@ export const runInference = async (
     const encoderResults = await encoderSession.run(encoderFeeds);
     const encoderHiddenStates = encoderResults.last_hidden_state || encoderResults[Object.keys(encoderResults)[0]];
 
-    // 3. Decoder Loop
+    // 3. Initialize Decoder
     let decoderInputIds = [getVocabId(config.bosToken)]; 
     const outputTokens: string[] = [];
     const maxSteps = 40; 
 
+    // 4. Create KV Cache (Dimensions from config.json: 16 heads, 1024 hidden size)
+    // head_dim = 1024 / 16 = 64
+    const dummyPast = createPastKeyValues(decoderSession, 16, 64);
+
+    // 5. Decode Loop
     for (let i = 0; i < maxSteps; i++) {
       const inputTensor = new ort.Tensor(
         'int64',
@@ -123,10 +134,10 @@ export const runInference = async (
 
       const decoderFeeds: Record<string, ort.Tensor> = {
         [config.decoderInputName]: inputTensor,
-        'encoder_hidden_states': encoderHiddenStates
+        'encoder_hidden_states': encoderHiddenStates,
+        ...dummyPast
       };
 
-      // Handle 'use_cache_branch' if model requires it (common in merged models)
       if (decoderSession.inputNames.includes('use_cache_branch')) {
         decoderFeeds['use_cache_branch'] = new ort.Tensor('bool', [false], [1]);
       }
@@ -138,6 +149,7 @@ export const runInference = async (
       const lastTokenOffset = (seqLen - 1) * vocabSize;
       const lastTokenLogits = logits.data.slice(lastTokenOffset, lastTokenOffset + vocabSize) as Float32Array;
 
+      // Greedy Argmax
       let maxIdx = 0;
       let maxVal = -Infinity;
       for (let j = 0; j < lastTokenLogits.length; j++) {
@@ -148,7 +160,6 @@ export const runInference = async (
       }
 
       const token = getTokenFromId(maxIdx);
-
       if (token === config.eosToken) break;
 
       outputTokens.push(token);
@@ -162,10 +173,11 @@ export const runInference = async (
   }
 };
 
-const preprocessImage = async (inputImageData: ImageData, config: ModelConfig): Promise<ort.Tensor> => {
-  const targetSize = config.imageSize; // 384
+// --- Image Processing ---
 
-  // 1. Resize via Canvas
+const preprocessImage = async (inputImageData: ImageData, config: ModelConfig): Promise<ort.Tensor> => {
+  const targetSize = config.imageSize; // 448
+
   const canvas = document.createElement('canvas');
   canvas.width = targetSize;
   canvas.height = targetSize;
@@ -182,8 +194,7 @@ const preprocessImage = async (inputImageData: ImageData, config: ModelConfig): 
   const resizedData = ctx.getImageData(0, 0, targetSize, targetSize);
   const { data } = resizedData;
 
-  // 2. Convert to SINGLE CHANNEL (Grayscale) Tensor
-  // Size is just Width * Height (not * 3)
+  // Float32 Array for 1 Channel (Grayscale)
   const floatData = new Float32Array(targetSize * targetSize);
 
   for (let i = 0; i < targetSize * targetSize; i++) {
@@ -195,28 +206,45 @@ const preprocessImage = async (inputImageData: ImageData, config: ModelConfig): 
     let g = data[gIdx] / 255.0;
     let b = data[bIdx] / 255.0;
 
+    // Invert if Dark Mode (handled in hook, but safeguard here)
     if (config.invert) {
       r = 1.0 - r;
       g = 1.0 - g;
       b = 1.0 - b;
     }
 
-    // Convert to Grayscale
+    // Grayscale
     const gray = (r + g + b) / 3.0;
 
-    // Normalize
-    // We utilize mean[0] and std[0] since we only have 1 channel
+    // Normalize using TexTeller specific mean/std
     const norm = (gray - config.mean[0]) / config.std[0];
 
-    // Assign directly (No stride offset needed for 1 channel)
     floatData[i] = norm;
   }
 
-  // Shape: [Batch=1, Channels=1, Height=384, Width=384]
+  // Shape: [1, 1, 448, 448]
   return new ort.Tensor('float32', floatData, [1, 1, targetSize, targetSize]);
 };
 
-// --- Helpers --- (No changes needed below, but included for completeness)
+// --- Helpers ---
+
+const createPastKeyValues = (session: ort.InferenceSession, numHeads: number, headDim: number): Record<string, ort.Tensor> => {
+  const feeds: Record<string, ort.Tensor> = {};
+  const batchSize = 1;
+  const seqLen = 0; 
+
+  session.inputNames.forEach(name => {
+    if (name.startsWith('past_key_values')) {
+      // [Batch, NumHeads, SeqLen, HeadDim]
+      feeds[name] = new ort.Tensor(
+        'float32', 
+        new Float32Array(0), 
+        [batchSize, numHeads, seqLen, headDim]
+      );
+    }
+  });
+  return feeds;
+};
 
 const fetchWithProgress = async (url: string, phase: string, onProgress?: (p: string, v: number) => void) => {
   const cachedData = await getModelFromCache(url);
@@ -263,7 +291,11 @@ const getTokenFromId = (id: number): string => {
 };
 
 const cleanOutput = (text: string): string => {
-  return text.replace(/ |Ġ/g, ' ').replace(/<\/s>/g, '').replace(/<s>/g, '').trim();
+  return text
+    .replace(/ |Ġ/g, ' ')
+    .replace(/<\/s>/g, '')
+    .replace(/<s>/g, '')
+    .trim();
 };
 
 export const generateVariations = (base: string): string[] => {

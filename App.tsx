@@ -9,12 +9,11 @@ import HistorySidebar from './components/HistorySidebar';
 import OutputDisplay from './components/OutputDisplay';
 import CanvasArea from './components/CanvasArea';
 import LoadingOverlay from './components/LoadingOverlay';
-import DebugTest from './components/DebugTest'; // <--- Import the debug component
+import DebugTest from './components/DebugTest'; 
 
 const App: React.FC = () => {
     const { theme, toggleTheme } = useTheme();
     
-    // Destructure inferFromUrl here
     const {
         config,
         setConfig,
@@ -23,7 +22,7 @@ const App: React.FC = () => {
         setLatex,
         candidates,
         infer,
-        inferFromUrl, // <--- Get the new test function
+        inferFromUrl, 
         clear: clearModel,
         progress,
         loadingPhase,
@@ -52,6 +51,11 @@ const App: React.FC = () => {
         setSelectedIndex(0);
     };
 
+    // --- ADD THIS FUNCTION ---
+    const handleDeleteHistory = (id: string) => {
+        setHistory(prev => prev.filter(item => item.id !== id));
+    };
+
     const handleSelectCandidate = (idx: number) => {
         setSelectedIndex(idx);
         setLatex(candidates[idx].latex);
@@ -77,6 +81,7 @@ const App: React.FC = () => {
                     <HistorySidebar
                         history={history}
                         onSelect={handleLoadFromHistory}
+                        onDelete={handleDeleteHistory} // <--- PASS THE PROP HERE
                         isOpen={isSidebarOpen}
                     />
 
@@ -97,10 +102,6 @@ const App: React.FC = () => {
                             onClear={clearModel}
                         />
 
-                        {/* 
-                            --- DEBUG COMPONENT --- 
-                            It will float in the bottom right corner of the canvas area 
-                        */}
                         <DebugTest 
                             onTest={inferFromUrl} 
                             status={status} 

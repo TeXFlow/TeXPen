@@ -38,7 +38,7 @@ export const DEFAULT_CONFIG: ModelConfig = {
   eosToken: '</s>',
   bosToken: '<s>',
   padToken: '<pad>',
-  preferredProvider: 'wasm' 
+  preferredProvider: 'webgpu' 
 };
 
 export const initModel = async (

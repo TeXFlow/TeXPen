@@ -573,7 +573,8 @@ function _formatLatex(oldText: string, file: string, args: Args): [string, Log[]
     if (!setIgnoreAndReport(line, tempState, logs, file, pattern)) {
       if (needsSplit(line, pattern)) {
         const [thisLine, nextLine] = splitLine(line, tempState, file, args, logs);
-        if (nextLine) {
+        // Only add to queue if nextLine is non-empty and different from original line
+        if (nextLine && nextLine.trim() && nextLine !== line) {
           queue.unshift({ linumOld, line: nextLine });
         }
         line = thisLine;

@@ -242,7 +242,8 @@ export class InferenceService {
     processed = addNewlines(processed);
 
     // 3. Apply advanced formatting (indentation, wrapping)
-    processed = formatLatex(processed);
+    // DISABLED: Formatter was removing \begin{split} environments
+    // processed = formatLatex(processed);
 
     return processed;
   }

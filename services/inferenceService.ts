@@ -42,15 +42,21 @@ export class InferenceService {
   }
 
   public async infer(imageBlob: Blob, numCandidates: number = 5): Promise<{ latex: string; candidates: string[]; debugImage: string }> {
+    console.log('[Inference] Starting infer, numCandidates:', numCandidates);
     if (!this.model || !this.tokenizer) {
+      console.log('[Inference] Model not loaded, initializing...');
       await this.init();
     }
 
     // 1. Preprocess
+    console.log('[Inference] Starting preprocessing...');
     const { tensor: pixelValues, debugImage } = await this.preprocess(imageBlob);
+    console.log('[Inference] Preprocessing complete, tensor shape:', pixelValues.dims);
 
     // 2. Fast path: if only 1 candidate needed, use simple greedy decoding
     if (numCandidates <= 1) {
+      console.log('[Inference] Using fast path (greedy decoding)...');
+      console.time('[Inference] generate');
       const outputTokenIds = await this.model!.generate({
         pixel_values: pixelValues,
         max_new_tokens: 512,
@@ -60,6 +66,7 @@ export class InferenceService {
         bos_token_id: this.tokenizer!.bos_token_id,
         decoder_start_token_id: this.tokenizer!.bos_token_id,
       } as any);
+      console.timeEnd('[Inference] generate');
 
       const generatedText = this.tokenizer!.decode(outputTokenIds[0], {
         skip_special_tokens: true,

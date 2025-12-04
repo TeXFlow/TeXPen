@@ -66,7 +66,7 @@ A&=\frac{\pi r^{2}}{2}\\
     // Simple normalization for comparison (ignore whitespace differences)
     const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-    if (normalize(result) === normalize(expected)) {
+    if (normalize(result.latex) === normalize(expected)) {
       console.log('✅ Test PASSED!');
     } else {
       console.log('❌ Test FAILED!');

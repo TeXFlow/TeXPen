@@ -1,12 +1,14 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { ToolType } from '../types/canvas';
 
 interface CanvasBoardProps {
     onStrokeEnd: () => void;
     refCallback: (ref: HTMLCanvasElement | null) => void;
     theme: 'dark' | 'light';
+    activeTool: ToolType;
 }
 
-const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, theme }) => {
+const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, theme, activeTool }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -146,7 +148,21 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, the
         ctx.beginPath();
         ctx.moveTo(lastPos.current.x, lastPos.current.y);
         ctx.lineTo(currentPos.x, currentPos.y);
+
+        // Handle different tools
+        if (activeTool === 'eraser-radial') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = 20;
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = theme === 'dark' ? '#ffffff' : '#000000';
+        }
+
         ctx.stroke();
+
+        // Reset for next stroke
+        ctx.globalCompositeOperation = 'source-over';
 
         lastPos.current = currentPos;
     };
@@ -161,11 +177,20 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, the
         }
     };
 
+    // Determine cursor based on tool
+    const getCursor = () => {
+        if (activeTool === 'eraser-radial' || activeTool === 'eraser-line') {
+            return 'cell';
+        }
+        return 'crosshair';
+    };
+
     return (
         <div
             ref={containerRef}
-            className="w-full h-full cursor-crosshair touch-none overflow-hidden transition-all duration-500"
+            className="w-full h-full touch-none overflow-hidden transition-all duration-500"
             style={{
+                cursor: getCursor(),
                 backgroundImage: `radial-gradient(${theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)'} 1px, transparent 1px)`,
                 backgroundSize: '24px 24px',
                 backgroundPosition: '0 0'

@@ -1,5 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import CanvasBoard from './CanvasBoard';
+import CanvasToolbar from './CanvasToolbar';
+import { useCanvasHistory } from '../hooks/useCanvasHistory';
+import { ToolType } from '../types/canvas';
 
 interface CanvasAreaProps {
     theme: 'dark' | 'light';
@@ -9,12 +12,15 @@ interface CanvasAreaProps {
 
 const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [activeTool, setActiveTool] = useState<ToolType>('pen');
+    const { saveSnapshot, undo, redo, clear: clearHistory, canUndo, canRedo } = useCanvasHistory();
 
-    const handleStrokeEnd = () => {
+    const handleStrokeEnd = useCallback(() => {
         if (canvasRef.current) {
+            saveSnapshot(canvasRef.current);
             onStrokeEnd(canvasRef.current);
         }
-    };
+    }, [onStrokeEnd, saveSnapshot]);
 
     const handleClear = () => {
         const canvas = canvasRef.current;
@@ -22,13 +28,36 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) 
             const ctx = canvas.getContext('2d');
             if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
+        clearHistory();
         onClear();
     };
 
+    const handleUndo = useCallback(() => {
+        if (canvasRef.current) {
+            undo(canvasRef.current);
+        }
+    }, [undo]);
+
+    const handleRedo = useCallback(() => {
+        if (canvasRef.current) {
+            redo(canvasRef.current);
+        }
+    }, [redo]);
+
     return (
         <div className="flex-1 relative bg-[#f7f7f7] dark:bg-[#080808] group cursor-crosshair overflow-hidden transition-colors duration-500">
+            <CanvasToolbar
+                activeTool={activeTool}
+                onToolChange={setActiveTool}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+            />
+
             <CanvasBoard
                 theme={theme}
+                activeTool={activeTool}
                 onStrokeEnd={handleStrokeEnd}
                 refCallback={(ref) => canvasRef.current = ref}
             />

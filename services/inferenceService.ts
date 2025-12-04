@@ -92,6 +92,28 @@ export class InferenceService {
     ctx.drawImage(img, 0, 0);
     let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+    // 1.5 Handle Transparency & Theme: Force Black on White
+    // The model expects Black text on White background.
+    // Our input might be White text on Transparent (Dark Mode) or Black on Transparent (Light Mode).
+    const pixelData = imageData.data;
+    for (let i = 0; i < pixelData.length; i += 4) {
+      const alpha = pixelData[i + 3];
+      if (alpha < 50) {
+        // Transparent -> White
+        pixelData[i] = 255;     // R
+        pixelData[i + 1] = 255; // G
+        pixelData[i + 2] = 255; // B
+        pixelData[i + 3] = 255; // Alpha
+      } else {
+        // Content -> Black
+        pixelData[i] = 0;       // R
+        pixelData[i + 1] = 0;   // G
+        pixelData[i + 2] = 0;   // B
+        pixelData[i + 3] = 255; // Alpha
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+
     // 2. Trim white border
     imageData = this.trimWhiteBorder(imageData);
 

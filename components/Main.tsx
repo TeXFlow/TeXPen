@@ -96,7 +96,7 @@ const Main: React.FC = () => {
                 </div>
             </div>
 
-            <VisualDebugger debugImage={debugImage} />
+            {/* <VisualDebugger debugImage={debugImage} /> */}
 
             {/* Full overlay only for initial model loading or errors */}
             {showFullOverlay && (

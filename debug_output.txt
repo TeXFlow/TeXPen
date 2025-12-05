@@ -1,0 +1,18 @@
+Analyzing image: D:\GitHub\TeXFlow\InkTex\public\test.png
+Image dimensions: 407x125
+
+Sampling pixels:
+top-left (0, 0): R=255, G=255, B=255, A=255
+top-right (406, 0): R=255, G=255, B=255, A=255
+center (203, 62): R=255, G=255, B=255, A=255
+bottom-left (0, 124): R=255, G=255, B=255, A=255
+bottom-right (406, 124): R=255, G=255, B=255, A=255
+
+Pixel distribution (out of 50875 total):
+  Transparent (alpha=0): 0 (0.00%)
+  Low alpha (alpha<50): 0 (0.00%)
+  White-ish: 50255 (98.78%)
+  Black-ish: 79 (0.16%)
+  Other colors: 541 (1.06%)
+
+Saved raw canvas output to: D:\GitHub\TeXFlow\InkTex\debug_raw.png

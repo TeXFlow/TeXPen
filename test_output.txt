@@ -1,0 +1,29 @@
+Testing with image: D:\GitHub\TeXFlow\InkTex\public\test.png
+Initializing model...
+Loading tokenizer...
+Loading model with cpu (fp32)... (this may take a while)
+Ready
+Running inference...
+[DEBUG] Loaded image: 407x125
+[DEBUG] drawImage with _image: 407x125
+[DEBUG] Saved preprocessed image to: D:\GitHub\TeXFlow\InkTex\debug_preprocessed.png
+
+--- Result ---
+LaTeX: \[
+\begin{split}
+A&=\frac{\pi r^{2}}{2}\\
+&=\frac{1}{2}\pi r^{2}
+\end{split}
+\qquad\qquad\qquad\qquad \qquad\qquad\qquad\text{(1)}\]
+Candidates: [ "\\[\n\\begin{split}\nA&=\\frac{\\pi r^{2}}{2}\\\\\n&=\\frac{1}{2}\\pi r^{2}\n\\end{split}\n\\qquad\\qquad\\qquad\\qquad \\qquad\\qquad\\qquad\\text{(1)}\\]" ]
+--------------
+
+Γ¥î Test FAILED!
+Expected:
+\begin{split}
+A&=\frac{\pi r^{2}}{2}\\
+&=\frac{1}{2}\pi r^{2}
+\end{split}
+\qquad\qquad\qquad\qquad \qquad\qquad\qquad(1)
+Cleaning up...
+Done.

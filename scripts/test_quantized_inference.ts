@@ -96,7 +96,7 @@ async function runTest() {
 A&=\frac{\pi r^{2}}{2}\\
 &=\frac{1}{2}\pi r^{2}
 \end{split}
-\qquad\qquad\qquad\qquad \qquad\qquad\qquad\text{(1)}\]`;
+\qquad\qquad\qquad \qquad\qquad\qquad(1)\]`;
 
     // Simple normalization for comparison (ignore whitespace differences)
     const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();

@@ -45,11 +45,15 @@ export async function preprocess(imageBlob: Blob): Promise<{ tensor: Tensor; deb
       // Content
       if (hasTransparency) {
         // If image has transparency, assume it's a drawing (ink on transparent).
-        // Force content to Black (handles both Black ink and White ink/Dark Mode).
-        pixelData[i] = 0;
-        pixelData[i + 1] = 0;
-        pixelData[i + 2] = 0;
-        pixelData[i + 3] = 255;
+        // We want to convert the alpha channel to grayscale (Black ink on White background).
+        // Formula: Pixel = 255 * (1 - alpha).
+        // This preserves anti-aliasing and handles both White and Black ink.
+        const grayscale = Math.round(255 * (1 - (alpha / 255)));
+
+        pixelData[i] = grayscale;
+        pixelData[i + 1] = grayscale;
+        pixelData[i + 2] = grayscale;
+        pixelData[i + 3] = 255; // Fully opaque
       } else {
         // If image is opaque (e.g. uploaded file), respect brightness.
         // Threshold to binary Black/White.

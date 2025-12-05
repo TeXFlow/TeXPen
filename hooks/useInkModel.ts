@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { ModelConfig, Candidate } from '../types';
 import { inferenceService } from '../services/inference/InferenceService';
 
-export function useInkModel(theme: 'light' | 'dark', quantization: string, provider: 'webgpu' | 'wasm' | 'webgl') {
+export function useInkModel(theme: 'light' | 'dark', quantization: string = 'fp32', provider: 'webgpu' | 'wasm' | 'webgl') {
   const [numCandidates, setNumCandidates] = useState<number>(1);
   const [config, setConfig] = useState<ModelConfig>({
     encoderModelUrl: 'onnx-community/TexTeller3-ONNX',
@@ -39,12 +39,17 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string, provi
         const requests = await cache.keys();
         const isCached = requests.some(req => req.url.includes(config.encoderModelUrl));
         setIsLoadedFromCache(isCached);
-        // If it's cached, we don't need user confirmation to start downloading
+        // If it's cached, we auto-load (userConfirmed = true)
+        // If NOT cached, we wait for user to confirm (userConfirmed = false)
         if (isCached) {
           setUserConfirmed(true);
+        } else {
+          setUserConfirmed(false);
         }
       } catch (error) {
         console.warn('Cache API is not available or failed:', error);
+        // Fallback: assume not cached, ask user
+        setUserConfirmed(false);
       }
     }
     checkCache();
@@ -57,10 +62,20 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string, provi
     const initModel = async () => {
       try {
         setStatus('loading');
-        setLoadingPhase('Initializing model...');
+        // Better message based on cache status
+        const msg = isLoadedFromCache ? 'Loading model from cache...' : 'Downloading model... (this may take a while)';
+        setLoadingPhase(msg);
+
         await inferenceService.init((phase, progress) => {
           if (isCancelled) return; // Don't update state if cancelled
-          setLoadingPhase(phase);
+
+          // If the service sends a generic 'Loading model...' message, override it with our more specific one
+          if (phase.startsWith('Loading model')) {
+            setLoadingPhase(msg);
+          } else {
+            setLoadingPhase(phase);
+          }
+
           if (progress !== undefined) {
             setProgress(progress);
           }
@@ -93,7 +108,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string, provi
         });
       }
     };
-  }, [quantization, provider, userConfirmed]);
+  }, [quantization, provider, userConfirmed, isLoadedFromCache]);
 
   // Cleanup on page unload (refresh/close)
   useEffect(() => {

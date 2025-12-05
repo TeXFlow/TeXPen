@@ -12,6 +12,7 @@ export class InferenceService {
   private tokenizer: PreTrainedTokenizer | null = null;
   private static instance: InferenceService;
   private isInferring: boolean = false;
+  private dtype: string = 'fp32';
 
   private constructor() { }
 
@@ -42,7 +43,8 @@ export class InferenceService {
 
       const webgpuAvailable = await isWebGPUAvailable();
       const device = options.device || (webgpuAvailable ? 'webgpu' : 'wasm');
-      const dtype = options.dtype || (webgpuAvailable ? 'fp16' : 'q8');
+      const dtype = options.dtype || (webgpuAvailable ? 'fp32' : 'q8'); // Default to fp32
+      this.dtype = dtype;
 
       if (onProgress) onProgress(`Loading model with ${device} (${dtype})... (this may take a while)`);
 
@@ -59,11 +61,17 @@ export class InferenceService {
       };
 
       if (dtype === 'fp16') {
+        // Mixed Precision: Encoder (FP32) + Decoder (FP16)
+        // This prevents encoder instability while keeping decoder speed.
         sessionOptions = {
-          ...sessionOptions,
-          // For fp16, we use the default encoder (usually fp32 or mixed) if fp16 encoder isn't available,
-          // and the specific fp16 decoder.
-          encoder_model_file_name: 'encoder_model.onnx',
+          device: device,
+          dtype: {
+            encoder_model: 'fp32',
+            decoder_model_merged: 'fp16',
+            decoder_with_past_model: 'fp16',
+          },
+          // Explicitly point to the files
+          encoder_model_file_name: 'encoder_model.onnx', // Default FP32
           decoder_model_file_name: 'decoder_with_past_model_fp16.onnx',
         };
       } else if (dtype === 'q8') {
@@ -108,12 +116,15 @@ export class InferenceService {
       if (numCandidates <= 1) {
         const outputTokenIds = await this.model!.generate({
           pixel_values: pixelValues,
-          max_new_tokens: 1024,
+          max_new_tokens: 256, // Reduced to fail fast
           do_sample: false,
+          num_beams: 1, // Explicitly greedy
           pad_token_id: this.tokenizer!.pad_token_id,
           eos_token_id: this.tokenizer!.eos_token_id,
           bos_token_id: this.tokenizer!.bos_token_id,
           decoder_start_token_id: this.tokenizer!.bos_token_id,
+          // Only apply repetition penalty for fp16 to prevent loops
+          ...(this.dtype === 'fp16' ? { repetition_penalty: 1.25 } : {}),
         } as any);
 
         const generatedText = this.tokenizer!.decode(outputTokenIds[0], {

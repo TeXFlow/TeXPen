@@ -50,7 +50,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { theme } = useThemeContext();
-    const [quantization, setQuantization] = useState<string>('fp16');
+    const [quantization, setQuantization] = useState<string>('fp32');
     const [provider, setProvider] = useState<Provider>('wasm');
 
     useEffect(() => {

@@ -22,6 +22,17 @@ export async function preprocess(imageBlob: Blob): Promise<{ tensor: Tensor; deb
   // Our input might be White text on Transparent (Dark Mode) or Black on Transparent (Light Mode).
   // Always convert: transparent -> white, opaque -> black
   const pixelData = imageData.data;
+  let hasTransparency = false;
+
+  // 1.4 Check for transparency
+  for (let i = 0; i < pixelData.length; i += 4) {
+    if (pixelData[i + 3] < 250) {
+      hasTransparency = true;
+      break;
+    }
+  }
+
+  // 1.5 Handle Transparency & Theme
   for (let i = 0; i < pixelData.length; i += 4) {
     const alpha = pixelData[i + 3];
     if (alpha < 50) {
@@ -31,11 +42,31 @@ export async function preprocess(imageBlob: Blob): Promise<{ tensor: Tensor; deb
       pixelData[i + 2] = 255; // B
       pixelData[i + 3] = 255; // Alpha
     } else {
-      // Content -> Black
-      pixelData[i] = 0;       // R
-      pixelData[i + 1] = 0;   // G
-      pixelData[i + 2] = 0;   // B
-      pixelData[i + 3] = 255; // Alpha
+      // Content
+      if (hasTransparency) {
+        // If image has transparency, assume it's a drawing (ink on transparent).
+        // Force content to Black (handles both Black ink and White ink/Dark Mode).
+        pixelData[i] = 0;
+        pixelData[i + 1] = 0;
+        pixelData[i + 2] = 0;
+        pixelData[i + 3] = 255;
+      } else {
+        // If image is opaque (e.g. uploaded file), respect brightness.
+        // Threshold to binary Black/White.
+        const avg = (pixelData[i] + pixelData[i + 1] + pixelData[i + 2]) / 3;
+        if (avg > 128) {
+          // White
+          pixelData[i] = 255;
+          pixelData[i + 1] = 255;
+          pixelData[i + 2] = 255;
+        } else {
+          // Black
+          pixelData[i] = 0;
+          pixelData[i + 1] = 0;
+          pixelData[i + 2] = 0;
+        }
+        pixelData[i + 3] = 255;
+      }
     }
   }
   ctx.putImageData(imageData, 0, 0);

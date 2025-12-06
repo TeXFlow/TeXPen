@@ -1,10 +1,16 @@
 import { expect, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
-import { createCanvas, loadImage, Image } from '@napi-rs/canvas';
+import { createCanvas, loadImage, Image, ImageData } from '@napi-rs/canvas';
 
 // Extend Vitest's expect method with methods from react-testing-library
 expect.extend(matchers as any);
+// Aggressively shim ImageData
+(global as any).ImageData = ImageData;
+(globalThis as any).ImageData = ImageData;
+if ((global as any).window) {
+  (global as any).window.ImageData = ImageData;
+}
 
 // Run cleanup after each test case (e.g. clearing jsdom)
 afterEach(() => {
@@ -43,6 +49,14 @@ if (typeof HTMLCanvasElement === 'undefined') {
   // @napi-rs/canvas creates instances that don't strictly inherit from a global HTMLCanvasElement in Node execution 
   // unless we define it. We can just mock checking.
   (global as any).HTMLCanvasElement = class HTMLCanvasElement { };
+}
+
+if (typeof OffscreenCanvas === 'undefined') {
+  (global as any).OffscreenCanvas = class OffscreenCanvas {
+    constructor(width: number, height: number) {
+      return createCanvas(width, height) as any;
+    }
+  } as any;
 }
 
 if (typeof Image === 'undefined') {
@@ -91,10 +105,20 @@ const originalCreateElement = (global as any).document.createElement.bind((globa
       } else {
         // Fallback: Use FileReader
         buffer = await new Promise((resolve, reject) => {
-          // Node doesn't have FileReader by default usually unless jsdom, 
-          // but we are in 'node' env. We should rely on arrayBuffer() which Node Blob has.
-          // If this fails, we can assume it's not a real Blob.
-          reject(new Error("Global FileReader not available in Node and arrayBuffer() missing"));
+          if (typeof FileReader !== 'undefined') {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (reader.result instanceof ArrayBuffer) {
+                resolve(Buffer.from(reader.result));
+              } else {
+                reject(new Error("FileReader result wasn't ArrayBuffer"));
+              }
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsArrayBuffer(blob);
+          } else {
+            reject(new Error("Global FileReader not available in Node and arrayBuffer() missing"));
+          }
         });
       }
     } catch (e) {

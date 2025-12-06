@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ModelConfig, Candidate } from '../types';
 import { inferenceService } from '../services/inference/InferenceService';
 
@@ -27,6 +27,8 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [status, setStatus] = useState<string>('idle'); // idle, loading, error, success
   const [isInferencing, setIsInferencing] = useState<boolean>(false);
+  // Counter to track active inference requests - prevents race condition when one is aborted while another starts
+  const activeInferenceCount = useRef<number>(0);
   const [loadingPhase, setLoadingPhase] = useState<string>('');
   const [debugImage, setDebugImage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -127,13 +129,18 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
   }, []);
 
   const infer = useCallback(async (canvas: HTMLCanvasElement) => {
+    // Increment counter and set inferencing state
+    activeInferenceCount.current += 1;
     setIsInferencing(true);
     setStatus('inferencing'); // Use different status to avoid showing full overlay
 
     return new Promise<{ latex: string; candidates: Candidate[] } | null>((resolve, reject) => {
       canvas.toBlob(async (blob) => {
         if (!blob) {
-          setIsInferencing(false);
+          activeInferenceCount.current -= 1;
+          if (activeInferenceCount.current === 0) {
+            setIsInferencing(false);
+          }
           setStatus('error');
           return reject(new Error('Failed to create blob from canvas'));
         }
@@ -159,19 +166,20 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         } catch (e: any) {
           if (e.message === 'Aborted' || e.message === 'Skipped' || e.name === 'AbortError') {
             console.log('Inference aborted/skipped:', e.message);
-            // Do not set status to error, just silently fail
-            // We might want to set status back to idle if it was inferencing?
-            // Usually another inference immediately takes over, setting it to inferencing.
-            // If we set it to idle it might flash. kept as is or conditional?
-            // If this was the last one, maybe idle? But hard to know.
-            // Safest is to just NOT set error.
+            // Don't update status or latex - another inference is likely pending
+            // Just resolve with null to indicate no result from this attempt
+            resolve(null);
           } else {
             console.error('Inference error:', e);
             setStatus('error');
             reject(e);
           }
         } finally {
-          setIsInferencing(false);
+          // Decrement counter, only set isInferencing to false if no more active inferences
+          activeInferenceCount.current -= 1;
+          if (activeInferenceCount.current === 0) {
+            setIsInferencing(false);
+          }
         }
       }, 'image/png');
     });

@@ -83,6 +83,11 @@ export class InferenceService {
   private isProcessingQueue: boolean = false;
   private wakeQueuePromise: ((value: void) => void) | null = null;
 
+  // Timestamp when the pending request was created - used for grace period calculation
+  private pendingRequestTimestamp: number = 0;
+  // Grace period timeout ID for the pending request
+  private graceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
   private pendingRequest: {
     blob: Blob;
     numCandidates: number;
@@ -90,28 +95,51 @@ export class InferenceService {
     reject: (reason?: any) => void;
   } | null = null;
 
+  private static readonly GRACE_PERIOD_MS = 3000;
+
   public async infer(imageBlob: Blob, numCandidates: number = 1): Promise<InferenceResult> {
     return new Promise((resolve, reject) => {
-      // 1. If there's already a pending request, reject it (Skipped)
+      // 1. If there's already a pending request, reject it (Skipped) - always keep only the latest
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error("Skipped"));
       }
 
-      // 2. Set new pending request
+      // 2. Clear any existing grace timeout since we have a new request
+      if (this.graceTimeoutId) {
+        clearTimeout(this.graceTimeoutId);
+        this.graceTimeoutId = null;
+      }
+
+      // 3. Set new pending request with timestamp
       this.pendingRequest = {
         blob: imageBlob,
         numCandidates,
         resolve,
         reject
       };
+      this.pendingRequestTimestamp = Date.now();
 
-      // 3. Wake up the loop if it's waiting
+      // 4. If currently inferring, start the 3-second grace period timer immediately
+      //    This timer starts NOW, from when the user finished their stroke
+      if (this.isInferring && this.abortController) {
+        console.log('[InferenceService] New request while inferring. Starting 3s grace period from now...');
+        this.graceTimeoutId = setTimeout(() => {
+          // Time's up - abort the current inference if it's still running
+          if (this.isInferring && this.abortController) {
+            console.warn('[InferenceService] 3s grace period expired. Aborting current inference.');
+            this.abortController.abort();
+          }
+          this.graceTimeoutId = null;
+        }, InferenceService.GRACE_PERIOD_MS);
+      }
+
+      // 5. Wake up the loop if it's waiting
       if (this.wakeQueuePromise) {
         this.wakeQueuePromise();
         this.wakeQueuePromise = null;
       }
 
-      // 4. Ensure queue processing is running
+      // 6. Ensure queue processing is running
       if (!this.isProcessingQueue) {
         this.processQueue();
       }
@@ -123,33 +151,27 @@ export class InferenceService {
 
     try {
       while (this.pendingRequest) {
-        // If an inference is currently running, we need to decide: Wait or Abort?
+        // If an inference is currently running, wait for it to complete or be aborted
+        // Note: The grace period timer is already running from when infer() was called
         if (this.currentInferencePromise && this.isInferring) {
-          console.log('[InferenceService] New request pending. Allowing current inference 3s grace period...');
-
-          let timedOut = false;
-          const timeoutPromise = new Promise(resolve => setTimeout(() => {
-            timedOut = true;
-            resolve('timeout');
-          }, 3000));
-
-          // Wait for either the inference to finish naturally OR the 3s timer
-          await Promise.race([this.currentInferencePromise, timeoutPromise]);
-
-          if (timedOut && this.isInferring) {
-            console.warn('[InferenceService] 3s grace period expired. Aborting current inference.');
-            this.abortController?.abort();
-            // Critical: Must wait for it to actually cleanup before starting next
-            try { await this.currentInferencePromise; } catch (e) { /* ignore */ }
-          }
+          console.log('[InferenceService] Waiting for current inference to finish or abort...');
+          // Just wait - the grace timeout will handle aborting if needed
+          try { await this.currentInferencePromise; } catch (e) { /* ignore */ }
         }
 
-        // Double check pendingRequest still exists (it should)
+        // Double check pendingRequest still exists
         if (!this.pendingRequest) break;
 
-        // Pop the request
+        // Pop the request - take the LATEST one only
         const req = this.pendingRequest;
         this.pendingRequest = null;
+        this.pendingRequestTimestamp = 0;
+
+        // Clear the grace timeout since we're now processing this request
+        if (this.graceTimeoutId) {
+          clearTimeout(this.graceTimeoutId);
+          this.graceTimeoutId = null;
+        }
 
         // Start the inference
         this.isInferring = true;
@@ -213,9 +235,7 @@ export class InferenceService {
             this.abortController = null;
             this.currentInferencePromise = null;
 
-            // If pending request exists, wake up the loop if it was stuck expecting more?
-            // Actually, since this promise resolves, the loop below (await this.currentInferencePromise)
-            // will unblock, allowing the loop to continue.
+            // Wake up the loop if it was waiting for this inference to complete
             if (this.wakeQueuePromise) {
               this.wakeQueuePromise();
               this.wakeQueuePromise = null;
@@ -224,11 +244,8 @@ export class InferenceService {
         })();
 
         // Wait for this inference to complete OR for a new request to come in
-        // If a new request comes in, we want to wake up and race it against the timer.
-        // We race: currentInferencePromise VS newRequestSignal
-
         if (this.pendingRequest) {
-          // Immediately loop back to check race logic
+          // Immediately loop back - new request already waiting
           continue;
         } else {
           // Wait for completion or new request

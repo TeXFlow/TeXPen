@@ -26,6 +26,7 @@ export interface Candidate {
 
 export interface HistoryItem {
   id: string;
+  sessionId: string;
   latex: string;
   timestamp: number;
   source?: 'draw' | 'upload';

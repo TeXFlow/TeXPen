@@ -49,6 +49,10 @@ export interface AppContextType {
     // Tab Interface
     activeTab: 'draw' | 'upload';
     setActiveTab: (tab: 'draw' | 'upload') => void;
+
+    // Session
+    sessionId: string;
+    refreshSession: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -92,12 +96,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [showVisualDebugger, setShowVisualDebugger] = useState(false);
 
+    const [sessionId, setSessionId] = useState<string>(Date.now().toString());
+
+    // Refresh session on clear or load
+    const refreshSession = () => {
+        setSessionId(Date.now().toString());
+    };
+
     const loadFromHistory = (item: HistoryItem) => {
         setLatex(item.latex);
         setSelectedIndex(0);
-        // If history item is selected, we might want to switch to 'draw' tab?
-        // Let's assume yes for now.
         setActiveTab('draw');
+        // Start a new session when loading from history (branching)
+        refreshSession();
     };
 
     const toggleSidebar = () => {
@@ -150,7 +161,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Tab
         activeTab,
-        setActiveTab
+        setActiveTab,
+
+        // Session
+        sessionId,
+        refreshSession,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -21,7 +21,11 @@
   <!-- MathJax -->
   <script>
     window.MathJax = {
-      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+      loader: { load: ['[tex]/ams', '[tex]/physics', '[tex]/color', '[tex]/cancel'] },
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        packages: { '[+]': ['ams', 'physics', 'color', 'cancel'] }
+      },
       svg: { fontCache: 'global' },
       startup: {
         typeset: false

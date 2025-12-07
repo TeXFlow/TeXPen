@@ -32,6 +32,8 @@ const Main: React.FC = () => {
         activeTab,
         setActiveTab,
         toggleSidebar,
+        sessionId,
+        refreshSession,
     } = useAppContext();
 
     const { theme } = useThemeContext();
@@ -47,7 +49,7 @@ const Main: React.FC = () => {
             // History add handled by global context? Context doesn't auto-add?
             // Checking original code: Main.tsx calls addToHistory
             // I need addToHistory from context
-            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now(), source: 'draw' });
+            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now(), source: 'draw', sessionId });
         }
     };
     // Wait, I missed addToHistory in destructuring above. Adding it back.
@@ -61,7 +63,7 @@ const Main: React.FC = () => {
         if (!uploadPreview) return;
         const result = await inferFromUrl(uploadPreview);
         if (result) {
-            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now(), source: 'upload' });
+            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now(), source: 'upload', sessionId });
             setUploadPreview(null); // Clear preview after conversion
         }
         // Result is adding to history? I need to check how inferFromUrl works.
@@ -132,10 +134,12 @@ const Main: React.FC = () => {
                                                 id: Date.now().toString(),
                                                 latex: latex,
                                                 timestamp: Date.now(),
-                                                source: 'draw'
+                                                source: 'draw',
+                                                sessionId
                                             });
                                         }
                                         clearModel();
+                                        refreshSession();
                                     }}
                                 />
                                 {status === 'loading' && userConfirmed && renderLoadingOverlay()}

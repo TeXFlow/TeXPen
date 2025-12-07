@@ -23,6 +23,14 @@ afterEach(() => {
 if (typeof window === 'undefined') {
   (global as any).window = global;
   (global as any).self = global;
+  (global as any).window.addEventListener = (type: string, listener: any) => { };
+  (global as any).window.removeEventListener = (type: string, listener: any) => { };
+  (global as any).sessionStorage = {
+    getItem: (key: string) => null,
+    setItem: (key: string, value: string) => { },
+    removeItem: (key: string) => { },
+    clear: () => { }
+  };
 }
 
 if (typeof document === 'undefined') {

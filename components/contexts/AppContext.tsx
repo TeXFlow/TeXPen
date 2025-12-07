@@ -7,7 +7,7 @@ import { INFERENCE_CONFIG } from '../../services/inference/config';
 
 type Provider = 'webgpu' | 'wasm' | 'webgl';
 
-interface AppContextType {
+export interface AppContextType {
     // InkModel
     config: ModelConfig;
     setConfig: (config: ModelConfig) => void;

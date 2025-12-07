@@ -46,6 +46,9 @@ const Main: React.FC = () => {
 
     // Reset upload state when switching tabs
     React.useEffect(() => {
+        // Start a fresh session when switching modes to prevent history merging
+        refreshSession();
+
         if (activeTab === 'draw') {
             setShowUploadResult(false);
             setUploadPreview(null);

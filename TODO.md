@@ -1,13 +1,13 @@
 Priority
 
 Bugs
-- [ ] History saving when switching tabs creates versions
 
 Behavior
 
 Features
 
 Visuals
+- [ ] Candidates appear too small
 - [ ] Match buttons in upload tab to rest of theme
 - [ ] What is the bottom right corner in history entries
 

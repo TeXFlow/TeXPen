@@ -28,6 +28,7 @@ export interface HistoryItem {
   id: string;
   latex: string;
   timestamp: number;
+  source?: 'draw' | 'upload';
 }
 
 export type ModelStatus = 'loading' | 'ready' | 'error' | 'inferencing';

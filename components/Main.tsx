@@ -47,7 +47,7 @@ const Main: React.FC = () => {
             // History add handled by global context? Context doesn't auto-add?
             // Checking original code: Main.tsx calls addToHistory
             // I need addToHistory from context
-            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now() });
+            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now(), source: 'draw' });
         }
     };
     // Wait, I missed addToHistory in destructuring above. Adding it back.
@@ -61,7 +61,7 @@ const Main: React.FC = () => {
         if (!uploadPreview) return;
         const result = await inferFromUrl(uploadPreview);
         if (result) {
-            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now() });
+            addToHistory({ id: Date.now().toString(), latex: result.latex, timestamp: Date.now(), source: 'upload' });
             setUploadPreview(null); // Clear preview after conversion
         }
         // Result is adding to history? I need to check how inferFromUrl works.
@@ -126,7 +126,17 @@ const Main: React.FC = () => {
                                 <CanvasArea
                                     theme={theme}
                                     onStrokeEnd={handleInference}
-                                    onClear={clearModel}
+                                    onClear={() => {
+                                        if (latex && latex.trim()) {
+                                            addToHistory({
+                                                id: Date.now().toString(),
+                                                latex: latex,
+                                                timestamp: Date.now(),
+                                                source: 'draw'
+                                            });
+                                        }
+                                        clearModel();
+                                    }}
                                 />
                                 {status === 'loading' && userConfirmed && renderLoadingOverlay()}
                             </div>

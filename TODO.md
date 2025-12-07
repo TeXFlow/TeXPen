@@ -1,13 +1,15 @@
 Priority
 
 Bugs
-- [x] Upload tab button too low
 - [x] Multiline equations overflowing
 
 Behavior
-- [x] Update `candidates` description for inference (beam search has ≈equal speed to greedy now)
+- [ ] Replace the `candidates` information component to actually state its purpose (model generating multiple guesses for input)
 
 Features
+
+Visuals
+- [ ] Match buttons in upload tab to rest of theme
 
 Maintenance
 - [ ] refactor and add tests

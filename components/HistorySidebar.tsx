@@ -223,8 +223,8 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                             </button>
                                         )}
                                     </div>
-                                    <div className="relative h-8 flex items-center overflow-hidden">
-                                        <div className="text-xs text-slate-700 dark:text-white/80 font-mono truncate w-full history-math">
+                                    <div className="relative h-8 flex items-center overflow-hidden w-full">
+                                        <div className="text-xs text-slate-700 dark:text-white/80 font-mono w-full history-math whitespace-nowrap overflow-hidden text-ellipsis">
                                             {`\\(${sanitizeLatex(item.latex)}\\)`}
                                         </div>
                                         <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-[#0c0c0c] to-transparent pointer-events-none" />

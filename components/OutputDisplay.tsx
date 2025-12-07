@@ -4,9 +4,10 @@ import { useMathJax } from '../hooks/useMathJax';
 interface OutputDisplayProps {
     latex: string;
     isInferencing?: boolean;
+    className?: string;
 }
 
-const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = false }) => {
+const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = false, className }) => {
     // Trigger MathJax on latex change OR when inferencing ends (spinner hidden)
     // We pass both values so MathJax re-typesets when transitioning from spinner to content
     useMathJax({ latex, isInferencing }, 'latex-output');
@@ -32,7 +33,7 @@ const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = fa
     };
 
     return (
-        <div className="h-[30%] md:h-[35%] relative flex flex-col items-center justify-center bg-gradient-to-b from-white/[0.2] dark:from-white/[0.02] to-transparent z-10">
+        <div className={`relative flex flex-col items-center justify-center bg-gradient-to-b from-white/[0.2] dark:from-white/[0.02] to-transparent z-10 ${className || 'h-[30%] md:h-[35%]'}`}>
             <div className="w-full h-full overflow-x-auto overflow-y-auto scrollbar-thin flex relative">
                 <div id="latex-output" className="m-auto text-center text-2xl md:text-5xl text-slate-800 dark:text-white px-8 py-4 leading-relaxed">
                     {isInferencing ? (

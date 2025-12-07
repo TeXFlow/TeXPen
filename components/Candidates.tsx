@@ -75,14 +75,16 @@ const Candidates: React.FC = () => {
                             key={`${idx}-${cand.latex}`}
                             onClick={() => selectCandidate(idx)}
                             className={`
-                relative group flex-none h-9 px-4 rounded-md text-sm transition-all duration-200 border
+                relative group flex-none h-9 px-4 rounded-md text-sm transition-all duration-200 border flex items-center justify-center overflow-hidden max-w-[200px]
                 ${selectedIndex === idx
                                     ? 'bg-cyan-50/50 dark:bg-white/10 border-cyan-200 dark:border-white/20 text-cyan-700 dark:text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] dark:shadow-[0_0_15px_rgba(103,232,249,0.15)]'
                                     : 'bg-transparent border-transparent text-slate-500 dark:text-gray-500 hover:text-slate-700 dark:hover:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5'
                                 }
               `}
                         >
-                            <MathCandidate latex={cand.latex} />
+                            <div className="truncate w-full text-center">
+                                <MathCandidate latex={cand.latex} />
+                            </div>
 
                             {/* Active Indicator Dot */}
                             {selectedIndex === idx && (

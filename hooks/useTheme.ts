@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 export const useTheme = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('inktex_theme');
+      const saved = localStorage.getItem('texpen_theme');
       if (saved === 'dark' || saved === 'light') return saved;
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         return 'dark';
@@ -16,11 +16,11 @@ export const useTheme = () => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
       // Only auto-switch if user hasn't manually set a preference
-      if (!localStorage.getItem('inktex_theme')) {
+      if (!localStorage.getItem('texpen_theme')) {
         setTheme(e.matches ? 'dark' : 'light');
       }
     };
-    
+
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
@@ -32,7 +32,7 @@ export const useTheme = () => {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('inktex_theme', theme);
+    localStorage.setItem('texpen_theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {

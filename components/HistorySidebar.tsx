@@ -282,9 +282,7 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                                     </svg>
                                                 </span>
                                             )}
-                                            <span className="text-[10px] items-center font-mono text-slate-400 dark:text-white/30">
-                                                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
+
                                         </div>
                                         {!isConfirming && (
                                             <button
@@ -298,6 +296,11 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
                                     {/* USE SCALABLE COMPONENT */}
                                     <MathHistoryItem latex={item.latex} />
+
+                                    {/* Timestamp - Bottom Right */}
+                                    <span className="absolute bottom-1 right-2 text-[9px] font-mono text-slate-300 dark:text-white/20 select-none">
+                                        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
 
                                     {/* Confirmation Overlay */}
                                     {isConfirming && (

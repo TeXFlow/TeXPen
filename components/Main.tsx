@@ -176,24 +176,10 @@ const Main: React.FC = () => {
                                             />
                                         ) : (
                                             /* Result Split View */
-                                            <div className="flex-1 flex w-full h-full animate-in fade-in duration-500 flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-black/5 dark:divide-white/5">
+                                            <div className="flex-1 flex w-full h-full animate-in fade-in duration-500 flex-col divide-y divide-black/5 dark:divide-white/5">
 
-                                                {/* Left Panel: Source Image (Large) */}
-                                                <div className="md:w-1/2 h-1/2 md:h-full relative bg-black/5 dark:bg-white/5 flex items-center justify-center p-4">
-                                                    {uploadPreview && (
-                                                        <img
-                                                            src={uploadPreview}
-                                                            alt="Original"
-                                                            className="max-w-full max-h-full object-contain shadow-lg rounded-lg"
-                                                        />
-                                                    )}
-                                                    <div className="absolute bottom-4 left-4 inline-flex items-center px-2 py-1 bg-black/20 backdrop-blur-sm rounded text-xs text-white/50">
-                                                        Original Image
-                                                    </div>
-                                                </div>
-
-                                                {/* Right Panel: Result & Controls */}
-                                                <div className="md:w-1/2 h-1/2 md:h-full flex flex-col relative bg-white/40 dark:bg-transparent">
+                                                {/* Top Panel: Result & Controls (Fixed Height 50%) */}
+                                                <div className="h-1/2 flex flex-col relative bg-white/40 dark:bg-transparent min-h-0">
                                                     {/* Custom styled OutputDisplay - Flex grow to fill available space */}
                                                     <OutputDisplay
                                                         latex={latex}
@@ -201,22 +187,34 @@ const Main: React.FC = () => {
                                                         className="flex-1 w-full"
                                                     />
 
-                                                    {/* Candidates below output */}
-                                                    <Candidates />
 
-                                                    {/* Action Bar */}
-                                                    <div className="flex-none p-6 flex flex-col items-center justify-center border-t border-black/5 dark:border-white/5 bg-white/10 dark:bg-black/10">
-                                                        <button
-                                                            onClick={handleUploadAnother}
-                                                            className="px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-full shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2"
-                                                        >
-                                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                                            </svg>
-                                                            Upload Another Image
-                                                        </button>
-                                                    </div>
                                                 </div>
+
+                                                {/* Bottom Panel: Source Image (Rest of height) */}
+                                                <div className="flex-1 relative bg-black/5 dark:bg-white/5 flex items-center justify-center p-4 min-h-0">
+                                                    {uploadPreview && (
+                                                        <img
+                                                            src={uploadPreview}
+                                                            alt="Original"
+                                                            className="max-w-full max-h-full object-contain shadow-lg rounded-lg"
+                                                        />
+                                                    )}
+                                                    <div className="absolute top-4 left-4 inline-flex items-center px-2 py-1 bg-black/20 backdrop-blur-sm rounded text-xs text-white/50">
+                                                        Original Image
+                                                    </div>
+
+                                                    {/* Floating Upload Button */}
+                                                    <button
+                                                        onClick={handleUploadAnother}
+                                                        className="absolute bottom-6 left-1/2 -translate-x-1/2 px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-full shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2 backdrop-blur-md z-10"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                                        </svg>
+                                                        Upload Another Image
+                                                    </button>
+                                                </div>
+
                                             </div>
                                         )}
                                     </div>

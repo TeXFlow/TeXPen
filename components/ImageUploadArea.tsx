@@ -122,7 +122,7 @@ const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
                                 flex-1 py-4 rounded-xl font-bold text-lg shadow-xl shadow-cyan-500/20 transition-all active:scale-95
                                 ${isInferencing
                                     ? 'bg-slate-100 dark:bg-white/10 text-slate-400 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white'
+                                    : 'bg-cyan-500 hover:bg-cyan-400 text-white'
                                 }
                             `}
                         >

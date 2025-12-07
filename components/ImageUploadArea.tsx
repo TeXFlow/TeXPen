@@ -104,8 +104,8 @@ const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
                     onDrop={handleDrop}
                 >
                     <div className={`relative w-full aspect-square md:aspect-video rounded-3xl overflow-hidden shadow-2xl border transition-colors ${isDragging
-                            ? 'border-cyan-500 bg-cyan-500/10'
-                            : 'border-black/10 dark:border-white/10 bg-white dark:bg-black/50'
+                        ? 'border-cyan-500 bg-cyan-500/10'
+                        : 'border-black/10 dark:border-white/10 bg-white dark:bg-black/50'
                         }`}>
                         {!isDragging && (
                             <img
@@ -126,7 +126,7 @@ const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
 
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="absolute top-4 right-4 p-2 rounded-xl bg-black/50 hover:bg-black/70 text-white transition-colors backdrop-blur-md z-10"
+                            className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 text-slate-700 dark:text-white/80 transition-all backdrop-blur-md z-10 hover:border-cyan-500/50 dark:hover:border-cyan-400/50 hover:text-cyan-600 dark:hover:text-cyan-400"
                             title="Change Image"
                         >
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -140,10 +140,10 @@ const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
                             onClick={onConvert}
                             disabled={isInferencing}
                             className={`
-                                flex-1 py-4 rounded-xl font-bold text-lg shadow-xl shadow-cyan-500/20 transition-all active:scale-95
+                                flex-1 py-4 rounded-xl font-bold text-lg transition-all active:scale-[0.98] backdrop-blur-md border
                                 ${isInferencing
-                                    ? 'bg-slate-100 dark:bg-white/10 text-slate-400 cursor-not-allowed'
-                                    : 'bg-cyan-500 hover:bg-cyan-400 text-white'
+                                    ? 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-400 dark:text-white/40 cursor-not-allowed'
+                                    : 'bg-cyan-500/10 dark:bg-cyan-500/10 border-cyan-500/50 dark:border-cyan-400/50 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 dark:hover:bg-cyan-500/20 hover:border-cyan-500 dark:hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20'
                                 }
                             `}
                         >

@@ -217,7 +217,7 @@ const Main: React.FC = () => {
                                                             e.stopPropagation();
                                                             handleUploadAnother();
                                                         }}
-                                                        className="absolute bottom-6 left-1/2 -translate-x-1/2 px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-full shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2 backdrop-blur-md z-10 group-hover:shadow-cyan-500/40"
+                                                        className="absolute bottom-6 left-1/2 -translate-x-1/2 px-8 py-3 bg-cyan-500/10 dark:bg-cyan-500/10 hover:bg-cyan-500/20 dark:hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-bold rounded-full border border-cyan-500/50 dark:border-cyan-400/50 hover:border-cyan-500 dark:hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2 backdrop-blur-md z-10"
                                                     >
                                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />

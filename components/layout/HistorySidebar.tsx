@@ -1,11 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 import Select, { StylesConfig } from 'react-select';
-import { useMathJax } from '../hooks/useMathJax';
-import { HistoryItem } from '../types';
-import { TrashIcon, CheckIcon, XIcon, PenIcon } from './icons/HistoryIcons';
-import { useHistorySidebar } from '../hooks/useHistorySidebar';
-import { useAppContext } from './contexts/AppContext';
-import { useThemeContext } from './contexts/ThemeContext';
+import { useMathJax } from '../../hooks/useMathJax';
+import { HistoryItem } from '../../types';
+import { TrashIcon, CheckIcon, XIcon, PenIcon } from '../common/icons/HistoryIcons';
+import { useHistorySidebar } from '../../hooks/useHistorySidebar';
+import { useAppContext } from '../../contexts/AppContext';
+import { useThemeContext } from '../../contexts/ThemeContext';
 
 interface HistorySidebarProps {
     history: HistoryItem[];

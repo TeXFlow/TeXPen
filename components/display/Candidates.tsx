@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { useAppContext } from './contexts/AppContext';
+import { useAppContext } from '../../contexts/AppContext';
 
 
 // Component to render a single candidate with MathJax

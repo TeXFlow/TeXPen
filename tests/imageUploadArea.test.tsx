@@ -2,8 +2,8 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import ImageUploadArea from '../components/ImageUploadArea';
-import { AppContext } from '../components/contexts/AppContext';
+import ImageUploadArea from '../components/upload/ImageUploadArea';
+import { AppContext } from '../contexts/AppContext';
 
 // Partial mock of AppContext
 const mockInferFromUrl = vi.fn();

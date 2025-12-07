@@ -1,8 +1,8 @@
 import React, { useRef, useState, useCallback } from 'react';
 import CanvasBoard from './CanvasBoard';
 import CanvasToolbar from './CanvasToolbar';
-import { useCanvasHistory } from '../hooks/useCanvasHistory';
-import { ToolType } from '../types/canvas';
+import { useCanvasHistory } from '../../hooks/useCanvasHistory';
+import { ToolType } from '../../types/canvas';
 
 interface CanvasAreaProps {
     theme: 'dark' | 'light';

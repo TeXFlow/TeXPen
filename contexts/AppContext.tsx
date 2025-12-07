@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ModelConfig, Candidate, HistoryItem } from '../../types';
-import { useInkModel } from '../../hooks/useInkModel';
+import { ModelConfig, Candidate, HistoryItem } from '../types';
+import { useInkModel } from '../hooks/useInkModel';
 import { useThemeContext } from './ThemeContext';
-import { isWebGPUAvailable } from '../../utils/env';
-import { INFERENCE_CONFIG } from '../../services/inference/config';
+import { isWebGPUAvailable } from '../utils/env';
+import { INFERENCE_CONFIG } from '../services/inference/config';
 
 type Provider = 'webgpu' | 'wasm' | 'webgl';
 

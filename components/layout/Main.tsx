@@ -1,16 +1,16 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { useAppContext } from './contexts/AppContext';
-import { useThemeContext } from './contexts/ThemeContext';
-import { useHistoryContext } from './contexts/HistoryContext';
-import LiquidBackground from './LiquidBackground';
+import { useAppContext } from '../../contexts/AppContext';
+import { useThemeContext } from '../../contexts/ThemeContext';
+import { useHistoryContext } from '../../contexts/HistoryContext';
+import LiquidBackground from '../common/LiquidBackground';
 import Header from './Header';
 import HistorySidebar from './HistorySidebar';
-import OutputDisplay from './OutputDisplay';
-import Candidates from './Candidates';
-import CanvasArea from './CanvasArea';
-import LoadingOverlay from './LoadingOverlay';
-import VisualDebugger from './VisualDebugger';
-import ImageUploadArea from './ImageUploadArea';
+import OutputDisplay from '../display/OutputDisplay';
+import Candidates from '../display/Candidates';
+import CanvasArea from '../canvas/CanvasArea';
+import LoadingOverlay from '../common/LoadingOverlay';
+import VisualDebugger from '../debug/VisualDebugger';
+import ImageUploadArea from '../upload/ImageUploadArea';
 
 
 const Main: React.FC = () => {

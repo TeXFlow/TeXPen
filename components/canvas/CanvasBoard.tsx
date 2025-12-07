@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { ToolType, Point, Stroke } from '../types/canvas';
+import { ToolType, Point, Stroke } from '../../types/canvas';
 
 interface CanvasBoardProps {
     onStrokeEnd: () => void;
@@ -71,7 +71,7 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
             canvas.style.width = '100%';
             canvas.style.height = '100%';
         }
-        
+
         // Copy from backing canvas to visible canvas
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (ctx) {
@@ -190,7 +190,7 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
             clientX = (e as React.MouseEvent).clientX;
             clientY = (e as React.MouseEvent).clientY;
         }
-        
+
         return {
             x: clientX - rect.left,
             y: clientY - rect.top
@@ -254,7 +254,7 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
         const canvas = contentCanvasRef.current; // Draw on the backing canvas
         const ctx = canvas?.getContext('2d', { willReadFrequently: true });
         if (!canvas || !ctx) return;
-        
+
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 

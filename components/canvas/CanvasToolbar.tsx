@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ToolType } from '../types/canvas';
+import { ToolType } from '../../types/canvas';
 
 interface CanvasToolbarProps {
     activeTool: ToolType;

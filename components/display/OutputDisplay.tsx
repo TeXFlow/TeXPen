@@ -1,5 +1,5 @@
 import React from 'react';
-import { useMathJax } from '../hooks/useMathJax';
+import { useMathJax } from '../../hooks/useMathJax';
 
 interface OutputDisplayProps {
     latex: string;

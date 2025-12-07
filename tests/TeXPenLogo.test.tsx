@@ -3,7 +3,7 @@
  */
 import { render } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { TeXPenLogo } from '../components/TeXPenLogo';
+import { TeXPenLogo } from '../components/common/TeXPenLogo';
 
 describe('TeXPenLogo Component', () => {
     it('renders without crashing', () => {

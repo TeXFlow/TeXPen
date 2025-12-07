@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
-import { HistoryItem } from '../../types';
-import { useHistory } from '../../hooks/useHistory';
+import { HistoryItem } from '../types';
+import { useHistory } from '../hooks/useHistory';
 
 interface HistoryContextType {
     history: HistoryItem[];

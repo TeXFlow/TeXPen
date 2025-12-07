@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Select, { StylesConfig } from 'react-select';
-import { useThemeContext } from './contexts/ThemeContext';
-import { isWebGPUAvailable } from '../utils/env';
+import { useThemeContext } from '../../contexts/ThemeContext';
+import { isWebGPUAvailable } from '../../utils/env';
 
 type Provider = 'webgpu' | 'wasm' | 'webgl';
 

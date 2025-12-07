@@ -2,15 +2,15 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import Header from '../components/Header';
-import { AppContext } from '../components/contexts/AppContext';
-import { ThemeContext } from '../components/contexts/ThemeContext';
+import Header from '../components/layout/Header';
+import { AppContext } from '../contexts/AppContext';
+import { ThemeContext } from '../contexts/ThemeContext';
 
 // Mocks
-vi.mock('../components/QuantizationSelector', () => ({
+vi.mock('../components/settings/QuantizationSelector', () => ({
     QuantizationSelector: () => <div data-testid="quantization-selector" />
 }));
-vi.mock('../components/ProviderSelector', () => ({
+vi.mock('../components/settings/ProviderSelector', () => ({
     ProviderSelector: () => <div data-testid="provider-selector" />
 }));
 

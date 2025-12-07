@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useAppContext } from './contexts/AppContext';
-import { useThemeContext } from './contexts/ThemeContext';
+import { useAppContext } from '../../contexts/AppContext';
+import { useThemeContext } from '../../contexts/ThemeContext';
 import { ProviderSelector } from './ProviderSelector';
 import { QuantizationSelector } from './QuantizationSelector';
 

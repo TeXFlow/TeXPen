@@ -1,6 +1,6 @@
 import React from 'react';
 import Select, { StylesConfig } from 'react-select';
-import { useThemeContext } from './contexts/ThemeContext';
+import { useThemeContext } from '../../contexts/ThemeContext';
 
 interface QuantizationSelectorProps {
     value: string;

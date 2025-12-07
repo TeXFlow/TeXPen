@@ -1,8 +1,8 @@
 import React from 'react';
-import { AppProvider } from './components/contexts/AppContext';
-import { ThemeProvider } from './components/contexts/ThemeContext';
-import { HistoryProvider } from './components/contexts/HistoryContext';
-import Main from './components/Main';
+import { AppProvider } from './contexts/AppContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { HistoryProvider } from './contexts/HistoryContext';
+import Main from './components/layout/Main';
 
 const App: React.FC = () => {
     return (

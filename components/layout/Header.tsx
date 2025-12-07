@@ -1,7 +1,7 @@
 import React from 'react';
-import { useAppContext } from './contexts/AppContext';
-import { TeXPenLogo } from './TeXPenLogo';
-import { SettingsMenu } from './SettingsMenu';
+import { useAppContext } from '../../contexts/AppContext';
+import { TeXPenLogo } from '../common/TeXPenLogo';
+import { SettingsMenu } from '../settings/SettingsMenu';
 
 const Header: React.FC = () => {
     const {

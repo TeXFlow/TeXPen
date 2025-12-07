@@ -6,15 +6,16 @@ interface HistoryContextType {
     history: HistoryItem[];
     addToHistory: (item: HistoryItem) => void;
     deleteHistoryItem: (id: string) => void;
+    clearHistory: () => void;
 }
 
 const HistoryContext = createContext<HistoryContextType | undefined>(undefined);
 
 export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { history, addToHistory, deleteHistoryItem } = useHistory();
+    const { history, addToHistory, deleteHistoryItem, clearHistory } = useHistory();
 
     return (
-        <HistoryContext.Provider value={{ history, addToHistory, deleteHistoryItem }}>
+        <HistoryContext.Provider value={{ history, addToHistory, deleteHistoryItem, clearHistory }}>
             {children}
         </HistoryContext.Provider>
     );

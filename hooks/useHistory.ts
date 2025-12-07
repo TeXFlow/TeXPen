@@ -77,6 +77,10 @@ export const useHistory = () => {
     });
   };
 
+  const clearHistory = () => {
+    setHistory([]);
+  };
+
   const deleteHistoryItem = (id: string) => {
     setHistory(prev => prev.filter(item => item.id !== id));
   };
@@ -85,5 +89,6 @@ export const useHistory = () => {
     history,
     addToHistory,
     deleteHistoryItem,
+    clearHistory,
   };
 };

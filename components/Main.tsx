@@ -37,7 +37,7 @@ const Main: React.FC = () => {
     } = useAppContext();
 
     const { theme } = useThemeContext();
-    const { history, addToHistory, deleteHistoryItem } = useHistoryContext();
+    const { history, addToHistory, deleteHistoryItem, clearHistory } = useHistoryContext();
 
     // Store upload preview in state to persist if we want (currently not persisting between modes for simplicity, or we could)
     // To match "seamless", let's strictly switch views.
@@ -121,6 +121,7 @@ const Main: React.FC = () => {
                         history={history}
                         onSelect={loadFromHistory}
                         onDelete={deleteHistoryItem}
+                        onClearAll={clearHistory}
                         isOpen={isSidebarOpen}
                     />
 
@@ -191,12 +192,15 @@ const Main: React.FC = () => {
                                                 </div>
 
                                                 {/* Bottom Panel: Source Image (Rest of height) */}
-                                                <div className="flex-1 relative bg-black/5 dark:bg-white/5 flex items-center justify-center p-4 min-h-0">
+                                                <div
+                                                    onClick={handleUploadAnother}
+                                                    className="flex-1 relative bg-black/5 dark:bg-white/5 flex items-center justify-center p-4 min-h-0 cursor-pointer group hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                                                >
                                                     {uploadPreview && (
                                                         <img
                                                             src={uploadPreview}
                                                             alt="Original"
-                                                            className="max-w-full max-h-full object-contain shadow-lg rounded-lg"
+                                                            className="max-w-full max-h-full object-contain shadow-lg rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
                                                         />
                                                     )}
                                                     <div className="absolute top-4 left-4 inline-flex items-center px-2 py-1 bg-black/20 backdrop-blur-sm rounded text-xs text-white/50">
@@ -205,8 +209,11 @@ const Main: React.FC = () => {
 
                                                     {/* Floating Upload Button */}
                                                     <button
-                                                        onClick={handleUploadAnother}
-                                                        className="absolute bottom-6 left-1/2 -translate-x-1/2 px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-full shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2 backdrop-blur-md z-10"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleUploadAnother();
+                                                        }}
+                                                        className="absolute bottom-6 left-1/2 -translate-x-1/2 px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-full shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2 backdrop-blur-md z-10 group-hover:shadow-cyan-500/40"
                                                     >
                                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />

@@ -17,16 +17,21 @@ const Header: React.FC = () => {
                 {/* Minimalist Nib Icon */}
                 <div className="relative flex items-center justify-center">
                     <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <svg className="w-8 h-8 text-cyan-500 dark:text-cyan-400 transform group-hover:-rotate-12 transition-transform duration-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        {/* Nib Body */}
-                        <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                        {/* Ink Channel */}
-                        <path d="M2 2l7.586 7.586" />
-                        {/* Breather hole */}
-                        <circle cx="11" cy="11" r="2" />
-                        {/* Drawing Curve */}
-                        <path d="M12 19 C 12 19, 8 23, 4 21" className="opacity-0 group-hover:opacity-100 transition-opacity duration-500" strokeWidth="2" />
+                    <svg className="w-8 h-8 text-cyan-500 dark:text-cyan-400 overflow-visible" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        {/* Rotating Pen Group */}
+                        <g className="origin-center transform transition-transform duration-500 group-hover:-rotate-45">
+                            <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                            <path d="M2 2l7.586 7.586" />
+                            <circle cx="11" cy="11" r="2" />
+                        </g>
+                        {/* Stationary Ink Trace (Arc of the tip movement) */}
+                        {/* Tip moves from (2,2) -> (-2.14, 12) when rotated -45deg around (12,12) */}
+                        <path
+                            d="M 2 2 A 14.14 14.14 0 0 0 -2.14 12"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                            strokeWidth="2"
+                        />
                     </svg>
                 </div>
                 <TeXPenLogo className="h-8 w-auto" />

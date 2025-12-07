@@ -11,7 +11,7 @@ import CanvasArea from './CanvasArea';
 import LoadingOverlay from './LoadingOverlay';
 import VisualDebugger from './VisualDebugger';
 import ImageUploadArea from './ImageUploadArea';
-import NavRail from './NavRail';
+
 
 const Main: React.FC = () => {
     const {
@@ -31,6 +31,7 @@ const Main: React.FC = () => {
         showVisualDebugger,
         activeTab,
         setActiveTab,
+        toggleSidebar,
     } = useAppContext();
 
     const { theme } = useThemeContext();
@@ -97,8 +98,9 @@ const Main: React.FC = () => {
             {/* Main Content Area (z-10) */}
             <div className="relative z-10 flex w-full h-full">
 
-                {/* Navigation Rail */}
-                <NavRail activeMode={activeTab as 'draw' | 'upload'} onModeChange={(mode) => setActiveTab(mode)} />
+                {/* Removed NavRail */}
+
+
 
                 <div className="flex-1 flex min-h-0 relative">
                     <HistorySidebar

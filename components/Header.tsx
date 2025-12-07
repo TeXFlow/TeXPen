@@ -7,6 +7,10 @@ const Header: React.FC = () => {
     const {
         numCandidates,
         setNumCandidates,
+        activeTab,
+        setActiveTab,
+        toggleSidebar,
+        isSidebarOpen,
     } = useAppContext();
 
     return (
@@ -35,6 +39,28 @@ const Header: React.FC = () => {
                     </svg>
                 </div>
                 <TeXPenLogo className="h-8 w-auto" />
+            </div>
+
+            {/* Center: Mode Switcher */}
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5">
+                <button
+                    onClick={() => setActiveTab('draw')}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 ${activeTab === 'draw'
+                        ? 'bg-white dark:bg-[#222] text-cyan-600 dark:text-cyan-400 shadow-sm'
+                        : 'text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white'
+                        }`}
+                >
+                    Draw
+                </button>
+                <button
+                    onClick={() => setActiveTab('upload')}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 ${activeTab === 'upload'
+                        ? 'bg-white dark:bg-[#222] text-cyan-600 dark:text-cyan-400 shadow-sm'
+                        : 'text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white'
+                        }`}
+                >
+                    Upload
+                </button>
             </div>
 
             {/* Right: Controls */}
@@ -73,6 +99,8 @@ const Header: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+
 
                 {/* Settings Menu */}
                 <SettingsMenu />

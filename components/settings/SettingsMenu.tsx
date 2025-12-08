@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { useThemeContext } from '../../contexts/ThemeContext';
+import { useHistoryContext } from '../../contexts/HistoryContext';
 import { ProviderSelector } from './ProviderSelector';
 import { QuantizationSelector } from './QuantizationSelector';
 
@@ -16,6 +17,7 @@ export const SettingsMenu: React.FC = () => {
         setShowVisualDebugger,
     } = useAppContext();
     const { theme, toggleTheme } = useThemeContext();
+    const { filterMode, setFilterMode } = useHistoryContext();
 
     // Close on click outside
     useEffect(() => {
@@ -87,6 +89,33 @@ export const SettingsMenu: React.FC = () => {
                     <div className="p-3">
                         <div className="text-xs font-bold uppercase text-slate-400 dark:text-white/40 mb-2">Quantization</div>
                         <QuantizationSelector value={quantization} onChange={setQuantization} />
+                    </div>
+
+                    <div className="h-px bg-black/5 dark:bg-white/5 mx-2" />
+
+                    {/* History Filter */}
+                    <div className="p-3">
+                        <div className="text-xs font-bold uppercase text-slate-400 dark:text-white/40 mb-2">History Filter</div>
+                        <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-lg">
+                            <button
+                                onClick={() => setFilterMode('all')}
+                                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${filterMode === 'all'
+                                    ? 'bg-white dark:bg-zinc-800 text-cyan-600 dark:text-cyan-400 shadow-sm'
+                                    : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
+                                    }`}
+                            >
+                                All History
+                            </button>
+                            <button
+                                onClick={() => setFilterMode('current')}
+                                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${filterMode === 'current'
+                                    ? 'bg-white dark:bg-zinc-800 text-cyan-600 dark:text-cyan-400 shadow-sm'
+                                    : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
+                                    }`}
+                            >
+                                Active Tab
+                            </button>
+                        </div>
                     </div>
 
                     <div className="h-px bg-black/5 dark:bg-white/5 mx-2" />

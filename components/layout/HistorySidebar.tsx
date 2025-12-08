@@ -1,11 +1,11 @@
 import React from 'react';
-import Select, { StylesConfig } from 'react-select';
 import { useMathJax } from '../../hooks/useMathJax';
 import { HistoryItem } from '../../types';
 import { TrashIcon, CheckIcon, XIcon, PenIcon } from '../common/icons/HistoryIcons';
 import { useHistorySidebar } from '../../hooks/useHistorySidebar';
 import { useAppContext } from '../../contexts/AppContext';
 import { useThemeContext } from '../../contexts/ThemeContext';
+import { useHistoryContext } from '../../contexts/HistoryContext';
 
 interface HistorySidebarProps {
     history: HistoryItem[];
@@ -26,8 +26,9 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
 }) => {
     const { toggleSidebar, activeTab } = useAppContext();
     const { theme } = useThemeContext();
+    const { filterMode } = useHistoryContext(); // Use global filter mode
     const [expandedItems, setExpandedItems] = React.useState<Set<string>>(new Set());
-    const [filterMode, setFilterMode] = React.useState<'all' | 'current'>('all');
+    // Removed local filterMode state
     const [isClearing, setIsClearing] = React.useState(false);
 
     // Filter history based on mode and active tab
@@ -77,85 +78,6 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
     useMathJax([filteredHistory, expandedItems], undefined, 'history-math');
     useMathJax([filteredHistory, expandedItems], undefined, 'history-math-version');
 
-    const filterOptions = [
-        { value: 'all', label: 'All History' },
-        { value: 'current', label: `Active Tab (${activeTab === 'draw' ? 'Drawings' : 'Uploads'})` }
-    ];
-
-    const customStyles: StylesConfig = {
-        control: (provided) => ({
-            ...provided,
-            width: 'auto',
-            minWidth: '120px',
-            backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-            border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-            borderRadius: '0.5rem',
-            boxShadow: 'none',
-            cursor: 'pointer',
-            padding: '2px 8px',
-            minHeight: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            '&:hover': {
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-                borderColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
-            },
-        }),
-        valueContainer: (provided) => ({
-            ...provided,
-            padding: '0 4px 0 0',
-            margin: 0,
-        }),
-        input: (provided) => ({
-            ...provided,
-            margin: '0px',
-            color: theme === 'dark' ? 'white' : 'black',
-        }),
-        indicatorSeparator: () => ({
-            display: 'none',
-        }),
-        indicatorsContainer: (provided) => ({
-            ...provided,
-            height: 'auto',
-            padding: 0,
-        }),
-        dropdownIndicator: (provided) => ({
-            ...provided,
-            padding: 0,
-            color: theme === 'dark' ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)',
-        }),
-        singleValue: (provided) => ({
-            ...provided,
-            color: theme === 'dark' ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            margin: 0,
-        }),
-        menu: (provided) => ({
-            ...provided,
-            backgroundColor: theme === 'dark' ? '#1a1a1a' : 'white',
-            border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-            borderRadius: '0.75rem',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            zIndex: 50,
-            overflow: 'hidden',
-        }),
-        option: (provided, { isSelected, isFocused }) => ({
-            ...provided,
-            backgroundColor: isSelected
-                ? (theme === 'dark' ? 'rgb(6 182 212)' : 'rgb(6 182 212)')
-                : isFocused
-                    ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)')
-                    : 'transparent',
-            color: isSelected ? 'white' : (theme === 'dark' ? 'rgba(255, 255, 255, 0.8)' : '#1f2937'),
-            fontSize: '0.875rem',
-            cursor: 'pointer',
-            padding: '8px 12px',
-        }),
-    };
-
     return (
         <div
             className={`flex-none flex flex-col border-r border-black/5 dark:border-white/5 bg-white dark:bg-[#0c0c0c] transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-16'}`}
@@ -179,25 +101,8 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
                     </div>
 
                     {/* Title (Hidden when closed) */}
-                    <div className={`flex-1 flex flex-col justify-center pr-4 transition-opacity duration-200 ${isOpen ? 'opacity-100 delay-75' : 'opacity-0'} whitespace-nowrap overflow-hidden`}>
-                        {/* New Minimal Filter Dropdown Location */}
-                        <div className="w-full">
-                            <Select
-                                value={filterOptions.find(o => o.value === filterMode)}
-                                onChange={(option: { value: string; label: string } | null) => setFilterMode((option?.value as 'all' | 'current') || 'all')}
-                                options={filterOptions}
-                                styles={{
-                                    ...customStyles,
-                                    menuPortal: (base) => ({ ...base, zIndex: 9999 })
-                                }}
-                                isSearchable={false}
-                                menuPlacement="auto"
-                                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                                components={{
-                                    IndicatorSeparator: () => null,
-                                }}
-                            />
-                        </div>
+                    <div className={`flex-1 flex items-center transition-opacity duration-200 ${isOpen ? 'opacity-100 delay-75' : 'opacity-0'} whitespace-nowrap overflow-hidden`}>
+                        <h2 className="text-sm font-bold text-slate-400 dark:text-white/40 tracking-widest uppercase pl-2">History</h2>
                     </div>
                 </div>
 

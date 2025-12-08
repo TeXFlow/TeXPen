@@ -7,15 +7,18 @@ interface HistoryContextType {
     addToHistory: (item: HistoryItem) => void;
     deleteHistoryItem: (id: string) => void;
     clearHistory: () => void;
+    filterMode: 'all' | 'current';
+    setFilterMode: (mode: 'all' | 'current') => void;
 }
 
 const HistoryContext = createContext<HistoryContextType | undefined>(undefined);
 
 export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { history, addToHistory, deleteHistoryItem, clearHistory } = useHistory();
+    const [filterMode, setFilterMode] = React.useState<'all' | 'current'>('all');
 
     return (
-        <HistoryContext.Provider value={{ history, addToHistory, deleteHistoryItem, clearHistory }}>
+        <HistoryContext.Provider value={{ history, addToHistory, deleteHistoryItem, clearHistory, filterMode, setFilterMode }}>
             {children}
         </HistoryContext.Provider>
     );

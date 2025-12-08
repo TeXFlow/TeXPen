@@ -7,6 +7,28 @@
   <title>TeXPen</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+  <script>
+    (function () {
+      const saved = localStorage.getItem('texpen_theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      let shouldBeDark = false;
+      if (saved === 'dark') {
+        shouldBeDark = true;
+      } else if (saved === 'light') {
+        shouldBeDark = false;
+      } else if (prefersDark) {
+        shouldBeDark = true;
+      }
+
+      if (shouldBeDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    })();
+  </script>
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

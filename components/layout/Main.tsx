@@ -208,10 +208,14 @@ const Main: React.FC = () => {
 
                         {/* Conditionally Render Output and Candidates (Standard View for Draw Mode) */}
                         {activeTab === 'draw' && (
-                            <>
-                                <OutputDisplay latex={latex} isInferencing={isInferencing} />
+                            <div className="flex-none h-[35%] md:h-[40%] flex flex-col w-full relative z-10">
+                                <OutputDisplay
+                                    latex={latex}
+                                    isInferencing={isInferencing}
+                                    className="flex-1 w-full"
+                                />
                                 <Candidates />
-                            </>
+                            </div>
                         )}
 
                         {/* Workspace */}

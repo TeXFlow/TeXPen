@@ -11,7 +11,6 @@ import CanvasArea from '../canvas/CanvasArea';
 import LoadingOverlay from '../common/LoadingOverlay';
 import VisualDebugger from '../debug/VisualDebugger';
 import ImageUploadArea from '../upload/ImageUploadArea';
-import { MobileBottomNav } from './MobileBottomNav';
 
 
 const Main: React.FC = () => {

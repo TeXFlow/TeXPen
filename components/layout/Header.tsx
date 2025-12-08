@@ -14,10 +14,20 @@ const Header: React.FC = () => {
     } = useAppContext();
 
     return (
-        <div className="relative h-16 flex-none flex items-center justify-between px-6 border-b border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/20 select-none z-30 backdrop-blur-md">
+        <div className="relative h-14 md:h-16 flex-none flex items-center justify-between px-3 md:px-6 border-b border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/20 select-none z-30 backdrop-blur-md">
 
-            {/* Left: Logo */}
-            <div className="flex items-center gap-3 group">
+            {/* Left: Logo & Sidebar Toggle */}
+            <div className="flex items-center gap-2 md:gap-3 group">
+                {/* Mobile Sidebar Toggle */}
+                <button
+                    onClick={toggleSidebar}
+                    className="md:hidden p-2 -ml-2 text-slate-500 dark:text-white/40 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+
                 {/* Minimalist Nib Icon */}
                 <div className="relative flex items-center justify-center">
                     <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -41,8 +51,8 @@ const Header: React.FC = () => {
                 <TeXPenLogo className="h-8 w-auto" />
             </div>
 
-            {/* Center: Mode Switcher */}
-            <div className="flex md:absolute md:left-1/2 md:-translate-x-1/2 items-center bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5">
+            {/* Center: Mode Switcher (Desktop Only) */}
+            <div className="hidden md:flex md:absolute md:left-1/2 md:-translate-x-1/2 items-center bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5">
                 <button
                     onClick={() => setActiveTab('draw')}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 ${activeTab === 'draw'

@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import CanvasBoard from './CanvasBoard';
 import CanvasToolbar from './CanvasToolbar';
 import { useCanvasHistory } from '../../hooks/useCanvasHistory';
-import { ToolType } from '../../types/canvas';
+import { ToolType, Stroke } from '../../types/canvas';
 
 interface CanvasAreaProps {
     theme: 'dark' | 'light';
@@ -13,12 +13,21 @@ interface CanvasAreaProps {
 const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const contentCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const strokesRef = useRef<Stroke[]>([]);
     const [activeTool, setActiveTool] = useState<ToolType>('pen');
     const { saveSnapshot, undo, redo, clear: clearHistory, canUndo, canRedo } = useCanvasHistory();
 
+    const setCanvasRef = useCallback((ref: HTMLCanvasElement | null) => {
+        canvasRef.current = ref;
+    }, []);
+
+    const setContentCanvasRef = useCallback((ref: HTMLCanvasElement | null) => {
+        contentCanvasRef.current = ref;
+    }, []);
+
     const handleStrokeEnd = useCallback(() => {
         if (contentCanvasRef.current) {
-            saveSnapshot(contentCanvasRef.current);
+            saveSnapshot(contentCanvasRef.current, strokesRef.current);
             onStrokeEnd(contentCanvasRef.current);
         }
     }, [onStrokeEnd, saveSnapshot]);
@@ -34,6 +43,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) 
             const ctx = contentCanvas.getContext('2d', { willReadFrequently: true });
             if (ctx) ctx.clearRect(0, 0, contentCanvas.width, contentCanvas.height);
         }
+        strokesRef.current = [];
         clearHistory();
         onClear();
     };
@@ -42,7 +52,11 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) 
         const canvas = canvasRef.current;
         const contentCanvas = contentCanvasRef.current;
         if (contentCanvas && canvas) {
-            undo(contentCanvas);
+            const restoredStrokes = undo(contentCanvas);
+            if (restoredStrokes) {
+                strokesRef.current = [...restoredStrokes];
+            }
+
             // Copy to visible
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (ctx) {
@@ -59,7 +73,11 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) 
         const canvas = canvasRef.current;
         const contentCanvas = contentCanvasRef.current;
         if (contentCanvas && canvas) {
-            redo(contentCanvas);
+            const restoredStrokes = redo(contentCanvas);
+            if (restoredStrokes) {
+                strokesRef.current = [...restoredStrokes];
+            }
+
             // Copy to visible
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (ctx) {
@@ -86,9 +104,10 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) 
             <CanvasBoard
                 theme={theme}
                 activeTool={activeTool}
+                strokesRef={strokesRef}
                 onStrokeEnd={handleStrokeEnd}
-                refCallback={(ref) => canvasRef.current = ref}
-                contentRefCallback={(ref) => contentCanvasRef.current = ref}
+                refCallback={setCanvasRef}
+                contentRefCallback={setContentCanvasRef}
             />
 
             {/* Clear Button */}

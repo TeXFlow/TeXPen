@@ -7,11 +7,12 @@ interface CanvasBoardProps {
     contentRefCallback: (ref: HTMLCanvasElement | null) => void;
     theme: 'dark' | 'light';
     activeTool: ToolType;
+    strokesRef?: React.MutableRefObject<Stroke[]>;
 }
 
 const ERASER_SIZE = 20;
 
-const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, contentRefCallback, theme, activeTool }) => {
+const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, contentRefCallback, theme, activeTool, strokesRef: externalStrokesRef }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -20,7 +21,8 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Track strokes for line eraser
-    const strokesRef = useRef<Stroke[]>([]);
+    const localStrokesRef = useRef<Stroke[]>([]);
+    const strokesRef = externalStrokesRef || localStrokesRef;
     const currentStrokeRef = useRef<Point[]>([]);
 
     const contentCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -79,6 +81,7 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
             ctx.drawImage(contentCanvasRef.current, 0, 0);
 
             // Setup context properties for future drawing
+            ctx.resetTransform();
             ctx.scale(dpr, dpr);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -360,7 +363,7 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
         >
             <canvas
                 ref={canvasRef}
-                className="block touch-none"
+                className="block touch-none select-none"
                 onMouseDown={startDrawing}
                 onMouseMove={handleMouseMove}
                 onMouseUp={stopDrawing}
@@ -368,6 +371,8 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
                 onTouchStart={startDrawing}
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
+                onDragStart={(e) => e.preventDefault()}
+                onContextMenu={(e) => e.preventDefault()}
             />
 
             {/* Custom cursor */}

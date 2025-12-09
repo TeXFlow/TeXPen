@@ -1,9 +1,15 @@
 import { useRef, useCallback, useState } from 'react';
+import { Stroke } from '../types/canvas';
 
 const MAX_HISTORY = 50;
 
+interface HistoryItem {
+  image: ImageData;
+  strokes: Stroke[];
+}
+
 export const useCanvasHistory = () => {
-  const historyRef = useRef<ImageData[]>([]);
+  const historyRef = useRef<HistoryItem[]>([]);
   const historyIndexRef = useRef(-1);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -13,7 +19,7 @@ export const useCanvasHistory = () => {
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, []);
 
-  const saveSnapshot = useCallback((canvas: HTMLCanvasElement) => {
+  const saveSnapshot = useCallback((canvas: HTMLCanvasElement, strokes: Stroke[]) => {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
@@ -24,7 +30,10 @@ export const useCanvasHistory = () => {
     historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
 
     // Add new state
-    historyRef.current.push(imageData);
+    historyRef.current.push({
+      image: imageData,
+      strokes: [...strokes] // Create a copy of the strokes array
+    });
 
     // Limit history size
     if (historyRef.current.length > MAX_HISTORY) {
@@ -36,30 +45,34 @@ export const useCanvasHistory = () => {
     updateState();
   }, [updateState]);
 
-  const undo = useCallback((canvas: HTMLCanvasElement) => {
-    if (historyIndexRef.current <= 0) return;
+  const undo = useCallback((canvas: HTMLCanvasElement): Stroke[] | null => {
+    if (historyIndexRef.current <= 0) return null;
 
     historyIndexRef.current--;
-    const imageData = historyRef.current[historyIndexRef.current];
+    const historyItem = historyRef.current[historyIndexRef.current];
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || !imageData) return;
+    if (!ctx || !historyItem) return null;
 
-    ctx.putImageData(imageData, 0, 0);
+    ctx.putImageData(historyItem.image, 0, 0);
     updateState();
+
+    return historyItem.strokes;
   }, [updateState]);
 
-  const redo = useCallback((canvas: HTMLCanvasElement) => {
-    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+  const redo = useCallback((canvas: HTMLCanvasElement): Stroke[] | null => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return null;
 
     historyIndexRef.current++;
-    const imageData = historyRef.current[historyIndexRef.current];
+    const historyItem = historyRef.current[historyIndexRef.current];
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || !imageData) return;
+    if (!ctx || !historyItem) return null;
 
-    ctx.putImageData(imageData, 0, 0);
+    ctx.putImageData(historyItem.image, 0, 0);
     updateState();
+
+    return historyItem.strokes;
   }, [updateState]);
 
   const clear = useCallback(() => {

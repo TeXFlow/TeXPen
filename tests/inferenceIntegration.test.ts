@@ -69,30 +69,35 @@ describe('InferenceService Integration', () => {
     const blob = new Blob([buffer], { type: 'image/png' });
 
     // Initialize model
-    await inferenceService.init((status) => console.log(status), { device: 'cpu' as any, dtype: 'fp32' });
+    try {
+      await inferenceService.init((status) => console.log(status), { device: 'cpu' as any, dtype: 'fp32' });
 
-    // Run inference
-    const result = await inferenceService.infer(blob);
+      // Run inference
+      const result = await inferenceService.infer(blob);
 
-    expect(result).toBeDefined();
-    expect(result.latex).toBeDefined();
-    expect(result.candidates.length).toBeGreaterThan(0);
+      expect(result).toBeDefined();
+      expect(result.latex).toBeDefined();
+      expect(result.candidates.length).toBeGreaterThan(0);
 
-    const expected = String.raw`\[
-\begin{split}
-A&=\frac{\pi r^{2}}{2}\\
-&=\frac{1}{2}\pi r^{2}
-\end{split}
-\qquad\qquad\qquad\qquad \qquad\qquad\qquad(1)\]`;
+      const expected = String.raw`\[
+  \begin{split}
+  A&=\frac{\pi r^{2}}{2}\\
+  &=\frac{1}{2}\pi r^{2}
+  \end{split}
+  \qquad\qquad\qquad\qquad \qquad\qquad\qquad(1)\]`;
 
-    // Simple normalization for comparison
-    const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
+      // Simple normalization for comparison
+      const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-    // We use a loose check or exact check depending on determinism.
-    // For integration, just ensuring it produces *something* close or valid is good.
-    // But verifying exact output is better if deterministic.
-    // NOTE: Commenting out strict check if causing transform issues, but let's try with strict check again.
-    expect(normalize(result.latex)).toBe(normalize(expected));
+      // We use a loose check or exact check depending on determinism.
+      // For integration, just ensuring it produces *something* close or valid is good.
+      // But verifying exact output is better if deterministic.
+      // NOTE: Commenting out strict check if causing transform issues, but let's try with strict check again.
+      expect(normalize(result.latex)).toBe(normalize(expected));
+    } catch (e) {
+      console.error('Integration test failed:', e);
+      throw e;
+    }
 
   }, 120000); // 2 minute timeout
 

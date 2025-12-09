@@ -11,7 +11,7 @@ interface HistoryContextType {
     setFilterMode: (mode: 'all' | 'current') => void;
 }
 
-const HistoryContext = createContext<HistoryContextType | undefined>(undefined);
+export const HistoryContext = createContext<HistoryContextType | undefined>(undefined);
 
 export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { history, addToHistory, deleteHistoryItem, clearHistory } = useHistory();

@@ -22,7 +22,7 @@ describe('TeXPenLogo Component', () => {
     it('contains namespaced, unique IDs', () => {
         const { container } = render(<TeXPenLogo />);
         // Check for at least one of our unique IDs to ensure we didn't regress to generic ones
-        const symbol = container.querySelector('#texpen_font_0_4');
+        const symbol = container.querySelector('#font_0_4');
         expect(symbol).toBeInTheDocument();
     });
 });

@@ -19,26 +19,30 @@ describe('Transformers Pipeline', () => {
 
     // Initialize pipeline
     // Using the same model and settings as the original script
-    const pipe = await pipeline('image-to-text', 'onnx-community/TexTeller3-ONNX', {
-      device: 'cpu',
-      dtype: 'fp32',
-    });
+    try {
+      const pipe = await pipeline('image-to-text', 'onnx-community/TexTeller3-ONNX', {
+        device: 'cpu',
+        dtype: 'fp32',
+      });
 
-    // Load image and convert to grayscale as expected by the model
-    const image = await RawImage.read(imagePath);
-    const grayscale = image.grayscale();
+      // Load image and convert to grayscale as expected by the model
+      const image = await RawImage.read(imagePath);
+      const grayscale = image.grayscale();
 
-    // Run inference
-    const result = await pipe(grayscale, {
-      max_new_tokens: 1024,
-      num_beams: 1,
-    });
+      // Run inference
+      const result = await pipe(grayscale, {
+        max_new_tokens: 1024,
+        num_beams: 1,
+      });
 
-    expect(result).toBeDefined();
-    // result is typically an array of objects like [{ generated_text: "..." }]
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
-    expect(result[0]).toHaveProperty('generated_text');
+      expect(result).toBeDefined();
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]).toHaveProperty('generated_text');
+    } catch (e) {
+      console.error('Pipeline failed:', e);
+      throw e;
+    }
 
     // Optional: Log the result to see what it produced, similar to the script
     // console.log('Pipeline Result:', JSON.stringify(result, null, 2));

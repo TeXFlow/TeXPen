@@ -107,9 +107,7 @@ const Candidates: React.FC = () => {
                         <MathCandidate latex={cand.latex} />
 
                         {/* Active Indicator Dot - Minimal */}
-                        {selectedIndex === idx && (
-                            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-cyan-500 dark:bg-cyan-400"></span>
-                        )}
+
                     </button>
                 ))}
             </div>

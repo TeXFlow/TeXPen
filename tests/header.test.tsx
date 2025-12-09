@@ -36,6 +36,11 @@ const defaultAppContext: any = {
     customModelId: 'test/model',
     setCustomModelId: vi.fn(),
     isInitialized: true,
+    // Settings state
+    isSettingsOpen: false,
+    openSettings: vi.fn(),
+    closeSettings: vi.fn(),
+    settingsFocus: null,
 };
 
 const defaultThemeContext: any = {
@@ -86,16 +91,21 @@ describe('Header', () => {
         expect(mockSetActiveTab).toHaveBeenCalledWith('upload');
     });
 
-    // Sidebar toggle is mobile only and hard to test with current setup, skipping for now.
+    it('opens settings when clicking the gear icon', () => {
+        const mockOpenSettings = vi.fn();
+        renderHeader({ openSettings: mockOpenSettings, isSettingsOpen: false });
 
-    it('toggles theme via settings menu', () => {
-        renderHeader();
-
-        // Open settings menu first
         const settingsBtn = screen.getByTitle('Settings');
         fireEvent.click(settingsBtn);
 
-        // Find theme button (text "Theme")
+        expect(mockOpenSettings).toHaveBeenCalled();
+    });
+
+    it('toggles theme via settings menu', () => {
+        // Render with settings ALREADY open to test internal buttons
+        renderHeader({ isSettingsOpen: true });
+
+        // Find theme button (text "Theme") - visible only when open
         const themeBtn = screen.getByText('Theme');
         fireEvent.click(themeBtn);
 

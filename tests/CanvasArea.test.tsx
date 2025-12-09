@@ -97,4 +97,66 @@ describe('CanvasArea', () => {
 
         vi.restoreAllMocks();
     });
+
+    it('resets transform before drawing restored content to prevent double scaling', async () => {
+        const mockOnClear = vi.fn();
+        const mockOnStrokeEnd = vi.fn();
+
+        const initialStrokes: any[] = [
+            {
+                tool: 'pen',
+                color: '#000000',
+                width: 2,
+                points: [{ x: 0, y: 0 }, { x: 10, y: 10 }]
+            }
+        ];
+
+        // Create mock context
+        const mockCtx = {
+            clearRect: vi.fn(),
+            beginPath: vi.fn(),
+            stroke: vi.fn(),
+            moveTo: vi.fn(),
+            lineTo: vi.fn(),
+            drawImage: vi.fn(),
+            lineCap: '',
+            lineJoin: '',
+            strokeStyle: '',
+            lineWidth: 0,
+            save: vi.fn(),
+            restore: vi.fn(),
+            resetTransform: vi.fn(),
+            getImageData: vi.fn(() => ({ data: [], width: 100, height: 100 })),
+            putImageData: vi.fn(),
+        } as any;
+
+        const originalCreateElement = document.createElement.bind(document);
+        vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+            if (tagName === 'canvas') {
+                const canvas = originalCreateElement(tagName, options) as HTMLCanvasElement;
+                canvas.getContext = vi.fn(() => mockCtx);
+                return canvas;
+            }
+            return originalCreateElement(tagName, options);
+        });
+
+        render(
+            <CanvasArea
+                theme="light"
+                onClear={mockOnClear}
+                onStrokeEnd={mockOnStrokeEnd}
+                initialStrokes={initialStrokes}
+            />
+        );
+
+        await waitFor(() => {
+            // Verify correct sequence: save -> reset -> draw -> restore
+            expect(mockCtx.save).toHaveBeenCalled();
+            expect(mockCtx.resetTransform).toHaveBeenCalled();
+            expect(mockCtx.drawImage).toHaveBeenCalled();
+            expect(mockCtx.restore).toHaveBeenCalled();
+        });
+
+        vi.restoreAllMocks();
+    });
 });

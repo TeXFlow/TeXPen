@@ -1,7 +1,6 @@
 Priority
 
 Bugs
-- [ ] Restored drawing from history is sized too big
 
 Behavior
 - [ ] Make tooltip work on mobile

@@ -58,7 +58,10 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear, in
             });
 
             // Update visible canvas and state
+            visibleCtx.save();
+            visibleCtx.resetTransform();
             visibleCtx.drawImage(contentCanvasRef.current, 0, 0);
+            visibleCtx.restore();
             strokesRef.current = [...initialStrokes];
 
             // Push to undo stack so user can edit/undo from here

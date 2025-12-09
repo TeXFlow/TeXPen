@@ -23,14 +23,10 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
     preferredProvider: 'webgpu',
   });
 
-  const [latex, setLatex] = useState<string>('');
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [status, setStatus] = useState<string>('idle'); // idle, loading, error, success
   const [isInferencing, setIsInferencing] = useState<boolean>(false);
-  // Counter to track active inference requests - prevents race condition when one is aborted while another starts
   const activeInferenceCount = useRef<number>(0);
   const [loadingPhase, setLoadingPhase] = useState<string>('');
-  const [debugImage, setDebugImage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [userConfirmed, setUserConfirmed] = useState(false);
   const [isLoadedFromCache, setIsLoadedFromCache] = useState(false);
@@ -43,8 +39,6 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         const requests = await cache.keys();
         const isCached = requests.some(req => req.url.includes(config.encoderModelUrl));
         setIsLoadedFromCache(isCached);
-        // If it's cached, we auto-load (userConfirmed = true)
-        // If NOT cached, we wait for user to confirm (userConfirmed = false)
         if (isCached) {
           setUserConfirmed(true);
         } else {
@@ -52,37 +46,30 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         }
       } catch (error) {
         console.warn('Cache API is not available or failed:', error);
-        // Fallback: assume not cached, ask user
         setUserConfirmed(false);
       }
     }
     checkCache();
   }, [config.encoderModelUrl]);
 
-  // Track previous settings to detect actual changes vs StrictMode re-runs
   const prevSettingsRef = useRef<{ quantization: string; provider: string; modelId: string } | null>(null);
 
-  // Initialize model on mount, dispose on unmount or settings change
   useEffect(() => {
     let isCancelled = false;
 
     const initModel = async () => {
       try {
         setStatus('loading');
-        // Better message based on cache status
         const msg = isLoadedFromCache ? 'Loading model from cache...' : 'Downloading model... (this may take a while)';
         setLoadingPhase(msg);
 
         await inferenceService.init((phase, progress) => {
-          if (isCancelled) return; // Don't update state if cancelled
-
-          // If the service sends a generic 'Loading model...' message, override it with our more specific one
+          if (isCancelled) return;
           if (phase.startsWith('Loading model')) {
             setLoadingPhase(msg);
           } else {
             setLoadingPhase(phase);
           }
-
           if (progress !== undefined) {
             setProgress(progress);
           }
@@ -91,11 +78,10 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         if (!isCancelled) {
           setStatus('idle');
           setLoadingPhase('');
-          // Track that we successfully loaded with these settings
           prevSettingsRef.current = { quantization, provider, modelId: customModelId };
         }
       } catch (error) {
-        if (isCancelled) return; // Ignore errors if cancelled
+        if (isCancelled) return;
         console.error('Failed to initialize model:', error);
         setStatus('error');
         setLoadingPhase('Failed to load model');
@@ -106,11 +92,8 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
       initModel();
     }
 
-    // Cleanup: only dispose if settings actually changed (not just StrictMode re-run)
     return () => {
       isCancelled = true;
-      // Check if settings actually changed - if same settings, DON'T dispose
-      // The InferenceService singleton will reuse the existing model
       const settingsChanged = prevSettingsRef.current &&
         (prevSettingsRef.current.quantization !== quantization ||
           prevSettingsRef.current.provider !== provider ||
@@ -125,15 +108,12 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
     };
   }, [quantization, provider, customModelId, userConfirmed, isLoadedFromCache]);
 
-  // Note: beforeunload cleanup is now handled directly in InferenceService.ts
-
   const infer = useCallback(async (canvas: HTMLCanvasElement) => {
-    // Increment counter and set inferencing state
     activeInferenceCount.current += 1;
     setIsInferencing(true);
-    setStatus('inferencing'); // Use different status to avoid showing full overlay
+    setStatus('inferencing');
 
-    return new Promise<{ latex: string; candidates: Candidate[] } | null>((resolve, reject) => {
+    return new Promise<{ latex: string; candidates: Candidate[]; debugImage: string | null } | null>((resolve, reject) => {
       canvas.toBlob(async (blob) => {
         if (!blob) {
           activeInferenceCount.current -= 1;
@@ -146,18 +126,14 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         try {
           const res = await inferenceService.infer(blob, numCandidates);
           if (res) {
-            setLatex(res.latex);
-            setDebugImage(res.debugImage);
-
             // Map string candidates to Candidate objects
             const newCandidates = res.candidates.map((latex, index) => ({
               id: index,
               latex: latex
             }));
 
-            setCandidates(newCandidates);
             setStatus('success');
-            resolve({ latex: res.latex, candidates: newCandidates });
+            resolve({ latex: res.latex, candidates: newCandidates, debugImage: res.debugImage });
           } else {
             setStatus('idle');
             resolve(null);
@@ -165,8 +141,6 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         } catch (e: any) {
           if (e.message === 'Aborted' || e.message === 'Skipped' || e.name === 'AbortError') {
             console.log('Inference aborted/skipped:', e.message);
-            // Don't update status or latex - another inference is likely pending
-            // Just resolve with null to indicate no result from this attempt
             resolve(null);
           } else {
             console.error('Inference error:', e);
@@ -174,7 +148,6 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
             reject(e);
           }
         } finally {
-          // Decrement counter, only set isInferencing to false if no more active inferences
           activeInferenceCount.current -= 1;
           if (activeInferenceCount.current === 0) {
             setIsInferencing(false);
@@ -186,9 +159,8 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
 
   const inferFromUrl = useCallback(async (url: string) => {
     try {
-      // Load image from URL
       const img = new Image();
-      img.crossOrigin = 'anonymous'; // Handle CORS
+      img.crossOrigin = 'anonymous';
 
       await new Promise((resolve, reject) => {
         img.onload = resolve;
@@ -196,7 +168,6 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         img.src = url;
       });
 
-      // Create a canvas and draw the image
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
@@ -205,7 +176,6 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
 
       ctx.drawImage(img, 0, 0);
 
-      // Run inference
       return await infer(canvas);
 
     } catch (error) {
@@ -215,26 +185,14 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
     }
   }, [infer]);
 
-  const clear = useCallback(() => {
-    setLatex('');
-    setCandidates([]);
-    setDebugImage(null);
-    setStatus('idle');
-  }, []);
-
   return {
     config,
     setConfig,
     status,
-    latex,
-    setLatex,
-    candidates,
     infer,
     inferFromUrl,
-    clear,
     isInferencing,
     loadingPhase,
-    debugImage,
     numCandidates,
     setNumCandidates,
     progress,

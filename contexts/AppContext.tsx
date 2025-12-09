@@ -58,6 +58,15 @@ export interface AppContextType {
     // Session
     sessionId: string;
     refreshSession: () => void;
+
+    // Upload State
+    uploadPreview: string | null;
+    showUploadResult: boolean;
+    setUploadPreview: (url: string | null) => void;
+    setShowUploadResult: (show: boolean) => void;
+
+    // Inference State
+    activeInferenceTab?: 'draw' | 'upload' | null;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -81,15 +90,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         config,
         setConfig,
         status,
-        latex,
-        setLatex,
-        candidates,
-        infer,
-        inferFromUrl,
-        clear: clearModel,
+        infer: modelInfer,
+        inferFromUrl: modelInferFromUrl,
         loadingPhase,
         isInferencing,
-        debugImage,
         numCandidates,
         setNumCandidates,
         progress,
@@ -98,10 +102,124 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isLoadedFromCache,
     } = useInkModel(theme, quantization, provider, customModelId);
 
-    const [selectedIndex, setSelectedIndex] = useState<number>(0);
+    // --- State Management for Separate Tabs ---
+    interface TabState {
+        latex: string;
+        candidates: Candidate[];
+        selectedIndex: number;
+        debugImage: string | null;
+        // Upload specific
+        uploadPreview: string | null;
+        showUploadResult: boolean;
+    }
+
+    const initialTabState: TabState = {
+        latex: '',
+        candidates: [],
+        selectedIndex: 0,
+        debugImage: null,
+        uploadPreview: null,
+        showUploadResult: false
+    };
+
+    const [drawState, setDrawState] = useState<TabState>(initialTabState);
+    const [uploadState, setUploadState] = useState<TabState>(initialTabState);
+
+    // Helpers to get current active state
+    const currentState = activeTab === 'draw' ? drawState : uploadState;
+    const setCurrentState = activeTab === 'draw' ? setDrawState : setUploadState;
+
+    // derived values for context consumers
+    const latex = currentState.latex;
+    const candidates = currentState.candidates;
+    const selectedIndex = currentState.selectedIndex;
+    const debugImage = currentState.debugImage;
+
+    // Upload specific getters (always from uploadState to ensure persistence access even if tab switching?)
+    // Actually, Main.tsx only renders Upload UI when activeTab === 'upload'.
+    // But good to be explicitly reading from uploadState for clarity if we export them as `uploadPreview`.
+    // However, to keep the interface simple, I'll export `uploadPreview` from `uploadState`.
+    const uploadPreview = uploadState.uploadPreview;
+    const showUploadResult = uploadState.showUploadResult;
+
+    const setLatex = (val: string) => {
+        setCurrentState(prev => ({ ...prev, latex: val }));
+    };
+
+    const setSelectedIndex = (val: number) => {
+        setCurrentState(prev => ({ ...prev, selectedIndex: val }));
+    };
+
+    const selectCandidate = (index: number) => {
+        setCurrentState(prev => ({
+            ...prev,
+            selectedIndex: index,
+            latex: prev.candidates[index]?.latex || ''
+        }));
+    };
+
+    // Setters for upload state
+    const setUploadPreview = (url: string | null) => {
+        setUploadState(prev => ({ ...prev, uploadPreview: url }));
+    };
+
+    const setShowUploadResult = (show: boolean) => {
+        setUploadState(prev => ({ ...prev, showUploadResult: show }));
+    };
+
+    const clearModel = () => {
+        setCurrentState(initialTabState);
+    };
+
+    // Track which tab is performing inference
+    const [activeInferenceTab, setActiveInferenceTab] = useState<'draw' | 'upload' | null>(null);
+
+    // Wrappers for inference to update the correct state
+    const infer = async (canvas: HTMLCanvasElement) => {
+        setActiveInferenceTab('draw');
+        try {
+            // Typically called from 'draw' tab
+            const result = await modelInfer(canvas);
+            if (result) {
+                setDrawState(prev => ({
+                    ...prev,
+                    latex: result.latex,
+                    candidates: result.candidates,
+                    selectedIndex: 0,
+                    debugImage: result.debugImage
+                }));
+                return result;
+            }
+            return null;
+        } finally {
+            setActiveInferenceTab(null);
+        }
+    };
+
+    const inferFromUrl = async (url: string) => {
+        setActiveInferenceTab('upload');
+        try {
+            // Typically called from 'upload' tab
+            const result = await modelInferFromUrl(url);
+            if (result) {
+                setUploadState(prev => ({
+                    ...prev,
+                    latex: result.latex,
+                    candidates: result.candidates,
+                    selectedIndex: 0,
+                    debugImage: result.debugImage
+                }));
+                return result;
+            }
+            return null;
+        } finally {
+            setActiveInferenceTab(null);
+        }
+    };
+
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [showVisualDebugger, setShowVisualDebugger] = useState(false);
-
     const [sessionId, setSessionId] = useState<string>(Date.now().toString());
 
     // Refresh session on clear or load
@@ -110,8 +228,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const loadFromHistory = (item: HistoryItem) => {
-        setLatex(item.latex);
-        setSelectedIndex(0);
+        // Loading from history always goes to Draw tab as per original/standard behavior, 
+        // OR we could respect source. 
+        // Main.tsx handles switching logic, here we just set state.
+        // Let's reset Draw state to this item
+        setDrawState({
+            latex: item.latex,
+            candidates: [], // History doesn't typically save candidates? If it does, we'd load them.
+            selectedIndex: 0,
+            debugImage: null,
+            uploadPreview: null,
+            showUploadResult: false
+        });
         setActiveTab('draw');
         // Start a new session when loading from history (branching)
         refreshSession();
@@ -119,11 +247,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const toggleSidebar = () => {
         setIsSidebarOpen(prev => !prev);
-    };
-
-    const selectCandidate = (index: number) => {
-        setSelectedIndex(index);
-        setLatex(candidates[index].latex);
     };
 
     const value: AppContextType = {
@@ -174,6 +297,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Session
         sessionId,
         refreshSession,
+
+        // Upload State
+        uploadPreview,
+        showUploadResult,
+        setUploadPreview,
+        setShowUploadResult,
+
+        // Inference State
+        activeInferenceTab,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

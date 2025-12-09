@@ -35,16 +35,21 @@ const Main: React.FC = () => {
         toggleSidebar,
         sessionId,
         refreshSession,
+        uploadPreview,
+        showUploadResult,
+        setUploadPreview,
+        setShowUploadResult,
+        activeInferenceTab
     } = useAppContext();
 
     const { theme } = useThemeContext();
     const { history, addToHistory, deleteHistoryItem, clearHistory } = useHistoryContext();
 
-    // Store upload preview in state to persist if we want (currently not persisting between modes for simplicity, or we could)
-    // To match "seamless", let's strictly switch views.
-    const [showUploadResult, setShowUploadResult] = useState(false);
-    const [uploadPreview, setUploadPreview] = useState<string | null>(null);
     const uploadFileInputRef = useRef<HTMLInputElement>(null);
+
+    // Derived inference states
+    const isDrawInferencing = isInferencing && activeInferenceTab === 'draw';
+    const isUploadInferencing = isInferencing && activeInferenceTab === 'upload';
 
     // Handle file selection from the hidden input
     const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,18 +62,7 @@ const Main: React.FC = () => {
         }
         // Reset input so same file can be selected again
         e.target.value = '';
-    }, []);
-
-    // Reset upload state when switching tabs
-    React.useEffect(() => {
-        // Start a fresh session when switching modes to prevent history merging
-        refreshSession();
-
-        if (activeTab === 'draw') {
-            setShowUploadResult(false);
-            setUploadPreview(null);
-        }
-    }, [activeTab]);
+    }, [setUploadPreview, setShowUploadResult]);
 
     // Handle paste in upload mode (works in both preview and result views)
     React.useEffect(() => {
@@ -89,7 +83,7 @@ const Main: React.FC = () => {
 
         window.addEventListener('paste', handlePaste);
         return () => window.removeEventListener('paste', handlePaste);
-    }, [activeTab]);
+    }, [activeTab, setUploadPreview, setShowUploadResult]);
 
     const handleInference = async (canvas: HTMLCanvasElement) => {
         const result = await infer(canvas);
@@ -153,12 +147,6 @@ const Main: React.FC = () => {
     // Only show full overlay for initial model loading (User Confirmation), or critical errors.
     const showFullOverlay = (!userConfirmed && !isLoadedFromCache) || status === 'error';
 
-    // Logic for Full Screen Upload Mode
-    // We hide Output and Candidates if we are in Upload tab AND we haven't formulated a result yet (or user wants to see full screen input)
-    // Actually, "Preview" state (before convert) should also be full screen.
-    // So: activeTab === 'upload' && !showUploadResult
-    const isFullPageUpload = activeTab === 'upload' && !showUploadResult;
-
     // Helper for loading overlay content
     const renderLoadingOverlay = () => (
         <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col animate-in slide-in-from-bottom-5 duration-300">
@@ -212,7 +200,7 @@ const Main: React.FC = () => {
                             <div className="flex-none h-1/4 md:h-2/5 flex flex-col w-full relative z-10 shrink-0">
                                 <OutputDisplay
                                     latex={latex}
-                                    isInferencing={isInferencing}
+                                    isInferencing={isDrawInferencing}
                                     className="flex-1 w-full"
                                 />
                                 <Candidates />
@@ -223,7 +211,7 @@ const Main: React.FC = () => {
                         <div className="flex-1 relative overflow-hidden flex flex-col">
 
                             {/* Draw Mode */}
-                            <div className={`flex-1 flex flex-col absolute inset-0 transition-opacity duration-300 ${activeTab === 'draw' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+                            <div className={`flex-1 flex flex-col absolute inset-0 ${activeTab === 'draw' ? 'z-10' : 'z-0 pointer-events-none hidden'}`}>
                                 <CanvasArea
                                     theme={theme}
                                     onStrokeEnd={handleInference}
@@ -246,7 +234,7 @@ const Main: React.FC = () => {
 
                             {/* Upload Mode */}
                             {activeTab === 'upload' && (
-                                <div className="absolute inset-0 z-10 bg-transparent animate-in fade-in zoom-in-95 duration-200 p-4 flex flex-col overflow-hidden">
+                                <div className="absolute inset-0 z-10 bg-transparent p-4 flex flex-col overflow-hidden">
                                     <div className={`flex-1 bg-white/50 dark:bg-black/20 rounded-2xl overflow-hidden backdrop-blur-sm w-full h-full flex flex-col ${showUploadResult ? 'relative' : 'items-center justify-center'}`}>
 
                                         {!showUploadResult ? (
@@ -254,7 +242,7 @@ const Main: React.FC = () => {
                                             <ImageUploadArea
                                                 onImageSelect={handleImageSelect}
                                                 onConvert={handleUploadConvert}
-                                                isInferencing={isInferencing}
+                                                isInferencing={isUploadInferencing}
                                                 previewUrl={uploadPreview}
                                             />
                                         ) : (
@@ -266,9 +254,10 @@ const Main: React.FC = () => {
                                                     {/* Custom styled OutputDisplay - Flex grow to fill available space */}
                                                     <OutputDisplay
                                                         latex={latex}
-                                                        isInferencing={isInferencing}
+                                                        isInferencing={isUploadInferencing}
                                                         className="flex-1 w-full"
                                                     />
+                                                    <Candidates />
 
 
                                                 </div>

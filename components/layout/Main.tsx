@@ -172,16 +172,15 @@ const Main: React.FC = () => {
     // Only show full overlay for initial model loading (User Confirmation), or critical errors.
     const showFullOverlay = (!userConfirmed && !isLoadedFromCache) || status === 'error';
 
-    // Helper for loading overlay content
+    // Helper for downloading status
     const renderLoadingOverlay = () => (
-        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col animate-in slide-in-from-bottom-5 duration-300">
-            {/* Bottom bar with loading status */}
-            <div className="flex-none px-6 py-4 bg-white/95 dark:bg-[#111]/95 backdrop-blur-md border-t border-black/5 dark:border-white/5 flex items-center gap-4 shadow-lg">
-                <div className="relative w-5 h-5 flex-none">
+        <div className="absolute inset-x-0 bottom-8 z-30 flex justify-center pointer-events-none">
+            <div className="px-6 py-3 bg-white/90 dark:bg-[#111]/90 backdrop-blur-md border border-cyan-500/30 dark:border-cyan-400/30 rounded-full flex items-center gap-3 shadow-xl pointer-events-auto animate-in slide-in-from-bottom-5 duration-300">
+                <div className="relative w-4 h-4 flex-none">
                     <div className="absolute inset-0 border-2 border-cyan-500/30 rounded-full"></div>
                     <div className="absolute inset-0 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
-                <span className="text-sm font-medium text-slate-700 dark:text-white/80 whitespace-nowrap">
+                <span className="text-sm font-medium text-slate-700 dark:text-white/90 whitespace-nowrap">
                     {loadingPhase} {progress > 0 && `(${Math.round(progress)}%)`}
                 </span>
             </div>

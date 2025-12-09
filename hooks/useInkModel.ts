@@ -64,7 +64,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
     const initModel = async () => {
       try {
         setStatus('loading');
-        const msg = isLoadedFromCache ? 'Loading model from cache...' : 'Downloading model... (this may take a while)';
+        const msg = isLoadedFromCache ? 'Loading model from cache...' : 'Downloading model... (Inference paused)';
         setLoadingPhase(msg);
 
         await inferenceService.init((phase, progress) => {
@@ -113,6 +113,16 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
   }, [quantization, provider, customModelId, userConfirmed, isLoadedFromCache]);
 
   const infer = useCallback(async (canvas: HTMLCanvasElement) => {
+    // Prevent inference if model is loading or not confirmed
+    if (status === 'loading') {
+      console.warn('Inference skipped: Model is currently loading.');
+      return null;
+    }
+    if (!userConfirmed && !isLoadedFromCache) {
+      console.warn('Inference skipped: User has not confirmed model download.');
+      return null;
+    }
+
     activeInferenceCount.current += 1;
     setIsInferencing(true);
     setStatus('inferencing');
@@ -159,9 +169,14 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         }
       }, 'image/png');
     });
-  }, [numCandidates]);
+  }, [numCandidates, status, userConfirmed, isLoadedFromCache]);
 
   const inferFromUrl = useCallback(async (url: string) => {
+    if (status === 'loading') {
+      console.warn('Inference skipped: Model is currently loading.');
+      return null;
+    }
+
     try {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -187,7 +202,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
       setStatus('error');
       return null;
     }
-  }, [infer]);
+  }, [infer, status]);
 
   return {
     config,

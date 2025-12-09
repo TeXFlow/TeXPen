@@ -1,0 +1,29 @@
+bun test v1.3.3 (274e01c7)
+
+tests\CanvasArea.test.tsx:
+252 |     throw error;
+253 |   }
+254 |   if (!baseElement) {
+255 |     // default to document.body instead of documentElement to avoid output of potentially-large
+256 |     // head elements (such as JSS style blocks) in debug output
+257 |     baseElement = document.body;
+                        ^
+ReferenceError: document is not defined
+      at render (D:\GitHub\TeXFlow\TeXPen\node_modules\@testing-library\react\dist\pure.js:257:19)
+      at <anonymous> (D:\GitHub\TeXFlow\TeXPen\tests\CanvasArea.test.tsx:28:9)
+(fail) CanvasArea > calls onClear when Clear button is clicked
+69 |             resetTransform: vi.fn(),
+70 |             getImageData: vi.fn(() => ({ data: [], width: 100, height: 100 })),
+71 |             putImageData: vi.fn(),
+72 |         } as any;
+73 | 
+74 |         const originalCreateElement = document.createElement.bind(document);
+                                           ^
+ReferenceError: document is not defined
+      at <anonymous> (D:\GitHub\TeXFlow\TeXPen\tests\CanvasArea.test.tsx:74:39)
+      at <anonymous> (D:\GitHub\TeXFlow\TeXPen\tests\CanvasArea.test.tsx:42:60)
+(fail) CanvasArea > restores strokes when initialStrokes is provided
+
+ 0 pass
+ 2 fail
+Ran 2 tests across 1 file. [365.00ms]

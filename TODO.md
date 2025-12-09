@@ -1,9 +1,10 @@
 Priority
 
 Bugs
-- [ ] Fix model loading/downloading message, make it clear if model is loading even between page refreshes
+- [x] make inputs not attempt inference if not finished downloading
 
 Behavior
+- [x] Add clear downloading message
 - [ ] Make tooltip work on mobile
 - [ ] Make model loading message work on mobile
 

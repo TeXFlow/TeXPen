@@ -67,6 +67,8 @@ describe('CanvasArea', () => {
             save: vi.fn(),
             restore: vi.fn(),
             resetTransform: vi.fn(),
+            getImageData: vi.fn(() => ({ data: [], width: 100, height: 100 })),
+            putImageData: vi.fn(),
         } as any;
 
         const originalCreateElement = document.createElement.bind(document);

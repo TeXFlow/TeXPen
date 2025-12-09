@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { ModelConfig, Candidate, HistoryItem } from '../types';
+import { Stroke } from '../types/canvas';
 import { useInkModel } from '../hooks/useInkModel';
 import { useThemeContext } from './ThemeContext';
 import { isWebGPUAvailable } from '../utils/env';
@@ -15,6 +16,7 @@ export interface AppContextType {
     latex: string;
     setLatex: (latex: string) => void;
     candidates: Candidate[];
+    loadedStrokes?: Stroke[] | null; // Add to interface
     infer: (canvas: HTMLCanvasElement) => Promise<{ latex: string; candidates: Candidate[] } | null>;
     inferFromUrl: (url: string) => Promise<{ latex: string; candidates: Candidate[] } | null>;
     clearModel: () => void;
@@ -119,6 +121,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Upload specific
         uploadPreview: string | null;
         showUploadResult: boolean;
+        // Draw specific
+        loadedStrokes: Stroke[] | null;
     }
 
     const initialTabState: TabState = {
@@ -127,7 +131,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedIndex: 0,
         debugImage: null,
         uploadPreview: null,
-        showUploadResult: false
+        showUploadResult: false,
+        loadedStrokes: null
     };
 
     const [drawState, setDrawState] = useState<TabState>(initialTabState);
@@ -142,6 +147,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const candidates = currentState.candidates;
     const selectedIndex = currentState.selectedIndex;
     const debugImage = currentState.debugImage;
+    const loadedStrokes = drawState.loadedStrokes; // Specific to draw mode, can exposure directly
 
     // Upload specific getters (always from uploadState to ensure persistence access even if tab switching?)
     // Actually, Main.tsx only renders Upload UI when activeTab === 'upload'.
@@ -282,7 +288,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             selectedIndex: 0,
             debugImage: null,
             uploadPreview: null,
-            showUploadResult: false
+            showUploadResult: false,
+            loadedStrokes: item.strokes || null
         });
         setActiveTab('draw');
         // Start a new session when loading from history (branching)
@@ -301,6 +308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         latex,
         setLatex,
         candidates,
+        loadedStrokes,
         infer,
         inferFromUrl,
         clearModel,

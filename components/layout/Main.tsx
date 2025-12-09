@@ -43,7 +43,8 @@ const Main: React.FC = () => {
         showUploadResult,
         setUploadPreview,
         setShowUploadResult,
-        activeInferenceTab
+        activeInferenceTab,
+        loadedStrokes
     } = useAppContext();
 
     const { theme } = useThemeContext();
@@ -239,6 +240,7 @@ const Main: React.FC = () => {
                                 <CanvasArea
                                     theme={theme}
                                     onStrokeEnd={handleInference}
+                                    initialStrokes={loadedStrokes}
                                     onClear={() => {
                                         if (latex && latex.trim()) {
                                             addToHistory({

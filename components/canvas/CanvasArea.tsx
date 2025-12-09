@@ -8,9 +8,10 @@ interface CanvasAreaProps {
     theme: 'dark' | 'light';
     onStrokeEnd: (canvas: HTMLCanvasElement, strokes: Stroke[]) => void;
     onClear: () => void;
+    initialStrokes?: Stroke[] | null;
 }
 
-const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) => {
+const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear, initialStrokes }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const contentCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const strokesRef = useRef<Stroke[]>([]);
@@ -24,6 +25,46 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear }) 
     const setContentCanvasRef = useCallback((ref: HTMLCanvasElement | null) => {
         contentCanvasRef.current = ref;
     }, []);
+
+    // Restore strokes from history
+    React.useEffect(() => {
+        if (initialStrokes && initialStrokes.length > 0 && contentCanvasRef.current && canvasRef.current) {
+            const contentCtx = contentCanvasRef.current.getContext('2d', { willReadFrequently: true });
+            const visibleCtx = canvasRef.current.getContext('2d', { willReadFrequently: true });
+
+            if (!contentCtx || !visibleCtx) return;
+
+            // Clear canvases
+            const width = contentCanvasRef.current.width;
+            const height = contentCanvasRef.current.height;
+            contentCtx.clearRect(0, 0, width, height);
+            visibleCtx.clearRect(0, 0, width, height);
+
+            // Replay strokes
+            contentCtx.lineCap = 'round';
+            contentCtx.lineJoin = 'round';
+
+            initialStrokes.forEach(stroke => {
+                contentCtx.beginPath();
+                contentCtx.strokeStyle = stroke.color;
+                contentCtx.lineWidth = stroke.width;
+                if (stroke.points.length > 0) {
+                    contentCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                    for (let i = 1; i < stroke.points.length; i++) {
+                        contentCtx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                    }
+                }
+                contentCtx.stroke();
+            });
+
+            // Update visible canvas and state
+            visibleCtx.drawImage(contentCanvasRef.current, 0, 0);
+            strokesRef.current = [...initialStrokes];
+
+            // Push to undo stack so user can edit/undo from here
+            saveSnapshot(contentCanvasRef.current, strokesRef.current);
+        }
+    }, [initialStrokes, saveSnapshot]);
 
     const handleStrokeEnd = useCallback(() => {
         if (contentCanvasRef.current) {

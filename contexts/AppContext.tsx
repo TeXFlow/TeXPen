@@ -5,7 +5,7 @@ import { useThemeContext } from './ThemeContext';
 import { isWebGPUAvailable } from '../utils/env';
 import { INFERENCE_CONFIG } from '../services/inference/config';
 
-type Provider = 'webgpu' | 'wasm' | 'webgl';
+type Provider = 'webgpu' | 'wasm';
 
 export interface AppContextType {
     // InkModel

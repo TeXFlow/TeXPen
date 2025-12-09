@@ -3,7 +3,7 @@ import Select, { StylesConfig } from 'react-select';
 import { useThemeContext } from '../../contexts/ThemeContext';
 import { isWebGPUAvailable } from '../../utils/env';
 
-type Provider = 'webgpu' | 'wasm' | 'webgl';
+type Provider = 'webgpu' | 'wasm';
 
 interface ProviderSelectorProps {
     value: Provider;
@@ -12,7 +12,6 @@ interface ProviderSelectorProps {
 
 const providerOptions: { value: Provider, label: string }[] = [
     { value: 'webgpu', label: 'WebGPU (Fastest)' },
-    { value: 'webgl', label: 'WebGL (Legacy GPU)' },
     { value: 'wasm', label: 'WASM (Most Compatible, CPU)' },
 ];
 

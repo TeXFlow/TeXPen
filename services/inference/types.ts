@@ -14,7 +14,7 @@ export interface InferenceConfig {
   eosToken: string;
   bosToken: string;
   padToken: string;
-  preferredProvider: 'webgpu' | 'wasm' | 'webgl';
+  preferredProvider: 'webgpu' | 'wasm';
 }
 
 export interface InferenceResult {
@@ -25,7 +25,7 @@ export interface InferenceResult {
 
 export interface InferenceOptions {
   dtype?: string;
-  device?: 'webgpu' | 'wasm' | 'webgl';
+  device?: 'webgpu' | 'wasm';
   modelId?: string;
 }
 

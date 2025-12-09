@@ -16,7 +16,7 @@ export interface ModelConfig {
   eosToken: string;
   bosToken: string;
   padToken: string;
-  preferredProvider: 'webgpu' | 'webgl' | 'wasm';
+  preferredProvider: 'webgpu' | 'wasm';
 }
 
 export interface Candidate {

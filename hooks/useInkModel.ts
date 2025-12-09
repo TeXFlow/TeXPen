@@ -4,7 +4,7 @@ import { inferenceService } from '../services/inference/InferenceService';
 
 import { INFERENCE_CONFIG } from '../services/inference/config';
 
-export function useInkModel(theme: 'light' | 'dark', quantization: string = INFERENCE_CONFIG.DEFAULT_QUANTIZATION, provider: 'webgpu' | 'wasm' | 'webgl', customModelId: string = INFERENCE_CONFIG.MODEL_ID) {
+export function useInkModel(theme: 'light' | 'dark', quantization: string = INFERENCE_CONFIG.DEFAULT_QUANTIZATION, provider: 'webgpu' | 'wasm', customModelId: string = INFERENCE_CONFIG.MODEL_ID) {
   const [numCandidates, setNumCandidates] = useState<number>(1);
   const [config, setConfig] = useState<ModelConfig>({
     encoderModelUrl: 'onnx-community/TexTeller3-ONNX',

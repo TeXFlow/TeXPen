@@ -100,45 +100,6 @@ export class InferenceService {
 
         this.dtype = dtype;
 
-        // --- NEW: Pre-download large files using DownloadManager ---
-        if (onProgress) onProgress(`Checking local cache...`);
-
-        const baseUrl = `https://huggingface.co/${this.currentModelId}/resolve/main`;
-        const filesToDownload: string[] = [];
-
-        filesToDownload.push('config.json');
-        filesToDownload.push('tokenizer.json');
-        filesToDownload.push('tokenizer_config.json');
-        filesToDownload.push('preprocessor_config.json');
-
-        if (dtype === 'fp16') {
-          filesToDownload.push('encoder_model.onnx');
-          filesToDownload.push('decoder_with_past_model_fp16.onnx');
-        } else if (dtype === 'q8') {
-          filesToDownload.push('encoder_model_int8.onnx');
-          filesToDownload.push('decoder_with_past_model_int8.onnx');
-        } else {
-          filesToDownload.push('encoder_model.onnx');
-          filesToDownload.push('decoder_with_past_model.onnx');
-        }
-
-        const { downloadManager } = await import('../downloader/DownloadManager');
-
-        for (const file of filesToDownload) {
-          const url = `${baseUrl}/${file}`;
-          const isLarge = file.endsWith('.onnx');
-
-          await downloadManager.downloadFile(url, (received, total) => {
-            if (onProgress && isLarge) {
-              const percent = Math.round((received / total) * 100);
-              onProgress(`Downloading ${file} (${percent}%)`, percent);
-            } else if (onProgress && !isLarge) {
-              onProgress(`Downloading configuration...`);
-            }
-          });
-        }
-        // -----------------------------------------------------------
-
         if (onProgress) onProgress(`Loading model ${this.currentModelId} (${device}, ${dtype})...`);
 
         const sessionOptions = getSessionOptions(device, dtype);

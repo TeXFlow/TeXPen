@@ -1,13 +1,15 @@
 Priority
 
 Bugs
+- [x] make inputs not attempt inference if not finished downloading
 
 Behavior
+- [x] Add clear downloading message
 - [ ] Make tooltip work on mobile
 - [ ] Make model loading message work on mobile
 
 Features
-- [x] Allow lasso/box selection
+- [ ] Allow resuming downloads
 
 Visuals
 

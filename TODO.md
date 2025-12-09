@@ -1,15 +1,14 @@
 Priority
 
 Bugs
-- [x] make inputs not attempt inference if not finished downloading
+- [ ] Restored drawing from history is sized too big
 
 Behavior
-- [x] Add clear downloading message
 - [ ] Make tooltip work on mobile
 - [ ] Make model loading message work on mobile
 
 Features
-- [ ] Allow resuming downloads
+- [ ] Allow selection and moving in canvas
 
 Visuals
 

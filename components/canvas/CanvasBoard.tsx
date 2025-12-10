@@ -143,6 +143,13 @@ const CanvasBoard: React.FC<CanvasBoardProps> = ({ onStrokeEnd, refCallback, con
         redrawStrokes();
     }, [redrawStrokes]);
 
+    // Clear selection when switching away from Select tool
+    useEffect(() => {
+        if (activeTool !== 'select') {
+            setSelectedStrokeIndices([]);
+        }
+    }, [activeTool]);
+
     // Handle Theme Changes: Recolors existing strokes
     useEffect(() => {
         const canvas = contentCanvasRef.current; // Modify the backing canvas

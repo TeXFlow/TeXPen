@@ -1,5 +1,6 @@
 import { getDB, getPartialDownload, saveChunk, clearPartialDownload } from './db';
 import { DownloadProgress } from './types';
+import { env } from '@huggingface/transformers';
 
 export class DownloadManager {
   private static instance: DownloadManager;
@@ -20,7 +21,9 @@ export class DownloadManager {
    */
   public async downloadFile(url: string, onProgress?: (progress: DownloadProgress) => void): Promise<void> {
     // 1. Check if already in browser Cache Storage (transformers.js default location)
-    const cache = await caches.open('transformers-cache');
+    // @ts-ignore - env.cacheName exists in runtime
+    const cacheName = env.cacheName || 'transformers-cache';
+    const cache = await caches.open(cacheName);
     const cachedResponse = await cache.match(url);
 
     if (cachedResponse) {
@@ -149,6 +152,10 @@ export class DownloadManager {
 
     // 4. Assemble and store in Cache API
     const fullBlob = new Blob(chunks, { type: 'application/octet-stream' });
+
+    // Release memory held by chunks array immediately
+    chunks = [];
+
     const fullResponse = new Response(fullBlob, {
       headers: {
         'Content-Length': totalSize.toString(),

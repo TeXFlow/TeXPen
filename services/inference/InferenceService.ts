@@ -226,7 +226,7 @@ export class InferenceService {
     let debugImage: string = '';
 
     // Timing instrumentation (only log in development)
-    const isDev = import.meta.env?.DEV ?? false;
+    const isDev = (import.meta as any).env?.DEV ?? false;
     const timings: { preprocess?: number; generation?: number; total?: number } = {};
     const startTotal = performance.now();
 

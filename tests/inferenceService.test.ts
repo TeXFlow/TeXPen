@@ -71,6 +71,9 @@ describe('InferenceService Integration (Efficient)', () => {
   });
 
   it('should attempt initialization and download without hitting network (Legit Flow)', async () => {
+    // Suppress console.error for expected failures
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
     // We expect this to fail at the "Load Model" stage because we provided DUMMY ONNX files.
     // However, getting to that failure proves that:
     // 1. DownloadManager was called correctly (and "downloaded" our dummy).
@@ -96,9 +99,12 @@ describe('InferenceService Integration (Efficient)', () => {
       // 1. Protobuf/Parsing errors (ideal)
       // 2. "Unsupported device" (if it ignored our 'cpu' option for some reason)
       // 3. "failed to create session" (onnxruntime error)
-      const isExpectedError = /protobuf|offset|invalid|wire type|illegal|buffer|onnx|unsupported device|session/i.test(error.message);
+      // 4. "Unable to get model file path or buffer" (transformers.js error for bad files)
+      const isExpectedError = /protobuf|offset|invalid|wire type|illegal|buffer|onnx|unsupported device|session|Unable to get model file path or buffer/i.test(error.message);
 
       expect(isExpectedError).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
     }
 
     // specific check: DownloadManager must have been utilized

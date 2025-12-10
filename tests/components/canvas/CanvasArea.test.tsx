@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import React, { useEffect } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import CanvasArea from '../components/canvas/CanvasArea';
+import CanvasArea from '../../../components/canvas/CanvasArea';
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock CanvasBoard to ensure refs are passed back to CanvasArea
-vi.mock('../components/canvas/CanvasBoard', () => ({
+vi.mock('../../../components/canvas/CanvasBoard', () => ({
     default: ({ refCallback, contentRefCallback }: any) => {
         useEffect(() => {
             // Create mock canvas elements

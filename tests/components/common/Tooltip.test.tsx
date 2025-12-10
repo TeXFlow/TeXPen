@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { Tooltip } from '../components/common/Tooltip';
+import { Tooltip } from '../../../components/common/Tooltip';
 import { describe, it, expect } from 'vitest';
 
 describe('Tooltip', () => {

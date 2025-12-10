@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useInkModel } from '../hooks/useInkModel';
-import { inferenceService } from '../services/inference/InferenceService';
+import { useInkModel } from '../../hooks/useInkModel';
+import { inferenceService } from '../../services/inference/InferenceService';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock InferenceService
-vi.mock('../services/inference/InferenceService', () => ({
+vi.mock('../../services/inference/InferenceService', () => ({
     inferenceService: {
         init: vi.fn(),
         infer: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('../services/inference/InferenceService', () => ({
 }));
 
 // Mock utils/env
-vi.mock('../utils/env', () => ({
+vi.mock('../../utils/env', () => ({
     isWebGPUAvailable: vi.fn().mockResolvedValue(false),
 }));
 

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DownloadManager } from '../services/downloader/DownloadManager';
-import { getPartialDownload } from '../services/downloader/db';
+import { DownloadManager } from '../../../services/downloader/DownloadManager';
+import { getPartialDownload } from '../../../services/downloader/db';
 
 // Mock DB
-vi.mock('../services/downloader/db', () => ({
+vi.mock('../../../services/downloader/db', () => ({
   getDB: vi.fn(),
   saveChunk: vi.fn(),
   getPartialDownload: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('../services/downloader/db', () => ({
 }));
 
 // Access mocked functions
-import { saveChunk, getPartialDownload as mockGetPartial, clearPartialDownload as mockClearPartial } from '../services/downloader/db';
+import { saveChunk, getPartialDownload as mockGetPartial, clearPartialDownload as mockClearPartial } from '../../../services/downloader/db';
 
 describe('DownloadManager', () => {
   let downloadManager: DownloadManager;

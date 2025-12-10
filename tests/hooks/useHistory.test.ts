@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderHook, act } from '@testing-library/react';
-import { useHistory } from '../hooks/useHistory';
-import { HistoryItem } from '../types';
+import { useHistory } from '../../hooks/useHistory';
+import { HistoryItem } from '../../types';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('useHistory', () => {

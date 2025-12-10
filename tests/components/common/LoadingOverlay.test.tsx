@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import LoadingOverlay from '../components/common/LoadingOverlay';
-import { useAppContext } from '../contexts/AppContext';
+import LoadingOverlay from '../../../components/common/LoadingOverlay';
+import { useAppContext } from '../../../contexts/AppContext';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../contexts/AppContext');
+vi.mock('../../../contexts/AppContext');
 
 describe('LoadingOverlay', () => {
     const mockOpenSettings = vi.fn();

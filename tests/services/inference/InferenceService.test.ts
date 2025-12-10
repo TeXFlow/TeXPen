@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest';
-import { InferenceService } from '../services/inference/InferenceService';
-import { InferenceOptions } from '../services/inference/types';
+import { InferenceService } from '../../../services/inference/InferenceService';
+import { InferenceOptions } from '../../../services/inference/types';
 
 // Mock DownloadManager to prevent 300MB downloads while keeping Service logic "legit"
-vi.mock('../services/downloader/DownloadManager', () => {
+vi.mock('../../../services/downloader/DownloadManager', () => {
   return {
     downloadManager: {
       downloadFile: vi.fn().mockImplementation(async (url: string, onProgress) => {
@@ -108,7 +108,7 @@ describe('InferenceService Integration (Efficient)', () => {
     }
 
     // specific check: DownloadManager must have been utilized
-    const { downloadManager } = await import('../services/downloader/DownloadManager');
+    const { downloadManager } = await import('../../../services/downloader/DownloadManager');
     expect(downloadManager.downloadFile).toHaveBeenCalled();
   }, 30000);
 

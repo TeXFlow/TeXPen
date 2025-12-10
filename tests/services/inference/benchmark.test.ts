@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DownloadManager } from '../services/downloader/DownloadManager';
-import { getDB, clearPartialDownload } from '../services/downloader/db';
+import { DownloadManager } from '../../../services/downloader/DownloadManager';
+import { getDB, clearPartialDownload } from '../../../services/downloader/db';
 
 // Mock DB with slight delay
-vi.mock('../services/downloader/db', () => ({
+vi.mock('../../../services/downloader/db', () => ({
   getDB: vi.fn(),
   saveChunk: vi.fn().mockImplementation(async () => {
     // Simulate 2ms/write (very optimistic for IDB transaction creation + write)
@@ -14,7 +14,7 @@ vi.mock('../services/downloader/db', () => ({
 }));
 
 // Access mocked functions
-import { saveChunk } from '../services/downloader/db';
+import { saveChunk } from '../../../services/downloader/db';
 
 describe('DownloadManager Benchmark', () => {
   let downloadManager: DownloadManager;

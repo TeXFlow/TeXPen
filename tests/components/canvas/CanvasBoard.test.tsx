@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react';
-import CanvasBoard from '../components/canvas/CanvasBoard';
+import CanvasBoard from '../../../components/canvas/CanvasBoard';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
-import { Stroke, ToolType } from '../types/canvas';
+import { Stroke, ToolType } from '../../../types/canvas';
 
 describe('CanvasBoard Selection & Move', () => {
     let mockCtx: any;

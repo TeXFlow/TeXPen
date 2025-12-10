@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatLatex } from '../services/latexFormatter';
+import { formatLatex } from '../../../services/latexFormatter';
 
 describe('LatexFormatter', () => {
   it('should format basic text correctly', () => {

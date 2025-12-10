@@ -1,7 +1,6 @@
 Priority
 
 Bugs
-- [x] Info tooltip for candidates going off screen
 
 
 Behavior

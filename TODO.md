@@ -1,6 +1,7 @@
 Priority
 
 Bugs
+- [ ] Fix "Upload Another Image" being too tall on mobile view
 
 Behavior
 

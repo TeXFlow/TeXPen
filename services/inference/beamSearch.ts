@@ -2,32 +2,77 @@ import { PreTrainedTokenizer, Tensor } from '@huggingface/transformers';
 import { VisionEncoderDecoderModel, Beam } from './types';
 
 /**
- * Helper to dispose all tensors in a cache object.
+ * Helper to gather specific batch indices from a tensor or structure of tensors.
+ * Creates new Tensors with the selected logical batch rows.
  */
-function disposeCache(cache: any): void {
-  if (!cache) return;
-  if (Array.isArray(cache)) {
-    for (const item of cache) {
-      disposeCache(item);
+function gatherIndices(data: any, indices: number[]): any {
+  if (!data) return null;
+
+  // Handle Tensor
+  if (data.dims && data.data) {
+    const tensor = data as Tensor;
+    const [B, ...dims] = tensor.dims;
+
+    // If not batched (or batch=1 matched conceptually but we need to expand), 
+    // we assume the first dim is batch. 
+    // Safety check: if B doesn't match roughly?
+    // Actually transformers.js output tensors always have batch at dim 0.
+
+    // Calculate size of one batch row
+    const totalSize = tensor.data.length;
+    const stride = totalSize / B;
+
+    const CTOR = tensor.data.constructor as any;
+    const newData = new CTOR(indices.length * stride);
+
+    for (let i = 0; i < indices.length; i++) {
+      const src = indices[i];
+      // Copy the slice
+      const start = src * stride;
+      newData.set(tensor.data.subarray(start, start + stride), i * stride);
     }
-  } else if (cache && typeof cache === 'object') {
-    if (typeof cache.dispose === 'function') {
-      cache.dispose();
-    } else {
-      for (const key of Object.keys(cache)) {
-        disposeCache(cache[key]);
-      }
+
+    return new Tensor(tensor.type, newData, [indices.length, ...dims]);
+  }
+
+  // Handle Array (e.g. past_key_values layers)
+  if (Array.isArray(data)) {
+    return data.map(item => gatherIndices(item, indices));
+  }
+
+  // Handle Object (e.g. encoder_outputs generic dict)
+  if (typeof data === 'object') {
+    const result: any = {};
+    for (const key of Object.keys(data)) {
+      result[key] = gatherIndices(data[key], indices);
     }
+    return result;
+  }
+
+  return data;
+}
+
+/**
+ * Helper to safely dispose any tensor-like structure
+ */
+function disposeData(data: any): void {
+  if (!data) return;
+  if (data.dispose && typeof data.dispose === 'function') {
+    data.dispose();
+  } else if (Array.isArray(data)) {
+    data.forEach(d => disposeData(d));
+  } else if (typeof data === 'object') {
+    Object.values(data).forEach(v => disposeData(v));
   }
 }
 
 /**
- * Performs beam search decoding with KV cache optimization.
+ * Performs batched beam search decoding.
  * 
- * Key optimizations:
- * - Encoder outputs are computed once and reused
- * - KV cache is passed between decoder steps to avoid recomputing attention for previous tokens
- * - Only the new token is fed to the decoder after the first step
+ * Secure & Fast:
+ * - Runs all beams in a single batch (one session.run call).
+ * - Avoids WebGPU concurrency crashes.
+ * - Maximizes GPU utilization.
  */
 export async function beamSearch(
   model: VisionEncoderDecoderModel,
@@ -42,278 +87,280 @@ export async function beamSearch(
   const bosTokenId = tokenizer.bos_token_id as number;
   const padTokenId = tokenizer.pad_token_id as number;
 
-  // Initialize beams - pastKeyValues will be populated after first decoder call
-  let beams: Beam[] = [{ tokens: [bosTokenId], score: 0, done: false, pastKeyValues: null }];
+  // Active beams state
+  // We track beams by their metadata. The actual tensors (past_key_values) vary in batch size.
+  // indices: [batch_index] -> keeps track of which row in the current batch corresponds to which beam logic
+  let activeBeams: { tokens: number[]; score: number; done: boolean }[] = [
+    { tokens: [bosTokenId], score: 0, done: false }
+  ];
 
-  // 1. Run Encoder ONCE
+  // Completed candidates
+  const finalizedCandidates: Beam[] = [];
+
+  // Tensors
   let encoderOutputs: any = null;
-  try {
-    if (signal?.aborted) throw new Error("Aborted");
+  let pastKeyValues: any = null;
+  let currentDecoderInputIds: Tensor | null = null;
 
+  try {
+    // 1. Run Encoder ONCE (Batch=1)
+    if (signal?.aborted) throw new Error("Aborted");
     if ((model as any).encoder) {
       encoderOutputs = await (model as any).encoder({
         pixel_values: pixelValues,
       });
     }
-  } catch (e) {
-    if ((e as Error).message === "Aborted") throw e;
-    console.error("Failed to run encoder:", e);
-    throw e;
-  }
 
-  // Step through generation token by token
-  for (let step = 0; step < maxTokens; step++) {
-    if (signal?.aborted) {
-      // Dispose all cached states and encoder outputs before throwing
-      for (const beam of beams) {
-        disposeCache(beam.pastKeyValues);
-      }
-      if (encoderOutputs) {
-        for (const key in encoderOutputs) {
-          const val = encoderOutputs[key];
-          if (val && typeof val.dispose === 'function') {
-            val.dispose();
+    // Loop
+    for (let step = 0; step < maxTokens; step++) {
+      if (signal?.aborted) throw new Error("Aborted");
+
+      // Stop if all beams are done or we found enough candidates
+      if (activeBeams.length === 0) break;
+      if (finalizedCandidates.length >= numBeams) break;
+
+      // Prepare inputs
+      const batchSize = activeBeams.length;
+
+      // Expand/Gather encoderOutputs if batch size changed or indices need alignment
+      // Optimization: Only do this if batch size > 1 or logic dictates
+      // For simplicity/correctness: In the first step, batch=1.
+      // In step 1, we might expand to numBeams.
+
+      // On step 0, pastKeyValues is null.
+      // On step > 0, pastKeyValues has size of PREVIOUS batch.
+      // We need to reorder pastKeyValues based on how we selected beams in the previous step.
+      // (This reordering is handled at the END of the loop for the NEXT iteration).
+
+      // Construct decoder_input_ids
+      // If pastKeyValues is present, we only feed the LAST token.
+      const useCache = pastKeyValues !== null;
+      let inputIdsData: BigInt64Array;
+      let inputShape: number[];
+
+      if (useCache) {
+        // Feed only last token [Batch, 1]
+        inputIdsData = new BigInt64Array(batchSize);
+        inputShape = [batchSize, 1];
+        for (let i = 0; i < batchSize; i++) {
+          const tokens = activeBeams[i].tokens;
+          inputIdsData[i] = BigInt(tokens[tokens.length - 1]);
+        }
+      } else {
+        // Feed full sequence (Step 0 usually) [Batch, SeqLen]
+        // Assuming all beams have same length (they usually do in synchronized beam search)
+        const seqLen = activeBeams[0].tokens.length;
+        inputIdsData = new BigInt64Array(batchSize * seqLen);
+        inputShape = [batchSize, seqLen];
+        for (let i = 0; i < batchSize; i++) {
+          const tokens = activeBeams[i].tokens;
+          for (let j = 0; j < seqLen; j++) {
+            inputIdsData[i * seqLen + j] = BigInt(tokens[j]);
           }
         }
       }
-      throw new Error("Aborted");
-    }
 
-    const allCandidates: Beam[] = [];
+      // Dispose previous currentDecoderInputIds before creating a new one
+      if (currentDecoderInputIds) currentDecoderInputIds.dispose();
+      currentDecoderInputIds = new Tensor('int64', inputIdsData, inputShape);
 
-    // Parallelize processing of all beams
-    const beamPromises = beams.map(async (beam) => {
-      if (beam.done) {
-        return { type: 'done', beam };
-      }
-
-      let decoderInputIds: Tensor | null = null;
-      let logitsData: Float32Array | null = null;
-      let outputs: any = null;
+      // Expand pixelValues to batch size [Batch, C, H, W]
+      // We explicitly gather index 0 'batchSize' times
+      let batchPixelValues: Tensor | null = null;
 
       try {
-        // KV Cache Optimization:
-        // - First step (no cache): Feed full sequence [BOS]
-        // - Subsequent steps: Feed only the last token, reuse cached KV states
-        const hasCachedState = beam.pastKeyValues != null;
+        batchPixelValues = gatherIndices(pixelValues, new Array(batchSize).fill(0));
 
-        if (hasCachedState) {
-          // Only feed the last token when we have cached states
-          const lastToken = beam.tokens[beam.tokens.length - 1];
-          decoderInputIds = new Tensor(
-            'int64',
-            BigInt64Array.from([BigInt(lastToken)]),
-            [1, 1]
-          );
-        } else {
-          // First step: feed the full sequence
-          decoderInputIds = new Tensor(
-            'int64',
-            BigInt64Array.from(beam.tokens.map(t => BigInt(t))),
-            [1, beam.tokens.length]
-          );
+        // Run Forward
+        const forwardInputs: any = {
+          encoder_outputs: encoderOutputs,
+          decoder_input_ids: currentDecoderInputIds,
+          pixel_values: batchPixelValues, // Required by some specialized ONNX graphs
+          use_cache: true,
+        };
+        if (useCache) {
+          forwardInputs.past_key_values = pastKeyValues;
         }
 
-        // Try forward pass to get logits
-        if ((model as any).forward) {
-          const forwardInputs: any = {
-            pixel_values: pixelValues,
-            encoder_outputs: encoderOutputs,
-            decoder_input_ids: decoderInputIds,
-            use_cache: true,
-          };
+        const outputs = await (model as any).forward(forwardInputs);
 
-          // Pass cached KV states if available
-          if (hasCachedState) {
-            forwardInputs.past_key_values = beam.pastKeyValues;
+        const logits = outputs.logits || outputs.decoder_logits; // [Batch, SeqLen, Vocab]
+        const newPastKeyValues = outputs.past_key_values; // [Batch, ...] structure
+
+        // Process outputs
+        // Extract last token logits
+        const [B, Seq, Vocab] = logits.dims;
+        const vocabSize = Vocab;
+        // We want the last time step for each batch row
+        // logits buffer layout: Batch * Seq * Vocab
+
+        // Collect all candidates from all beams
+        // Format: { score, tokenId, beamIdx }
+        const candidates: { score: number; tokenId: number; beamIdx: number }[] = [];
+        const logitsData = logits.data; // Float32Array
+
+        for (let b = 0; b < batchSize; b++) {
+          // Pointer to start of this beam's logits at the last sequence position
+          // offset = b * (Seq * Vocab) + (Seq - 1) * Vocab
+          const offset = b * Seq * Vocab + (Seq - 1) * Vocab;
+
+          // Find best token(s) for this beam
+          // We can create a view
+          const beamLogits = logitsData.subarray(offset, offset + Vocab);
+
+          let maxLogit = -Infinity;
+          for (let i = 0; i < vocabSize; i++) {
+            if (beamLogits[i] > maxLogit) maxLogit = beamLogits[i];
           }
 
-          outputs = await (model as any).forward(forwardInputs);
-
-          const logits = outputs.logits || outputs.decoder_logits;
-          if (logits) {
-            // Get last token logits (always the last position in the sequence)
-            const seqLen = logits.dims[1]; // [batch, seq_len, vocab_size]
-            const vocabSize = logits.dims[logits.dims.length - 1];
-            const startIdx = (seqLen - 1) * vocabSize;
-            logitsData = new Float32Array(logits.data.slice(startIdx, startIdx + vocabSize));
+          let expSum = 0;
+          // Compute logSoftmax implicitly or just sparse topK?
+          // Beam search requires log_probs.
+          // We can compute log_sum_exp
+          for (let i = 0; i < vocabSize; i++) {
+            expSum += Math.exp(beamLogits[i] - maxLogit);
           }
-        }
+          const logSumExp = maxLogit + Math.log(expSum);
 
-        if (!logitsData) {
-          // Fallback: greedy generation (no KV cache optimization in fallback path)
-          const result = await model.generate({
-            pixel_values: pixelValues,
-            max_new_tokens: 1,
-            do_sample: false,
-            pad_token_id: padTokenId,
-            eos_token_id: eosTokenId,
-            bos_token_id: bosTokenId,
-            decoder_start_token_id: bosTokenId,
-          } as any);
-          const seqs = (result as any).sequences || result;
-          const nextToken = Number(seqs.data[seqs.data.length - 1]);
+          // Apply penalty and collect top K
+          // For efficiency, we just scan once
+          const currentBeamScore = activeBeams[b].score;
+          const currentTokens = new Set(activeBeams[b].tokens); // For penalty
 
-          // Dispose old cache if any
-          disposeCache(beam.pastKeyValues);
+          // Optimization: Don't sort entire vocabulary. Just keep top 2*numBeams global?
+          // Or per beam? Standard is per beam expand, then global prune.
+          // Since numBeams is small (~5), we can just push top K from this beam to global list.
 
-          const newCandidate = {
-            tokens: [...beam.tokens, nextToken],
-            score: beam.score,
-            done: nextToken === eosTokenId,
-            pastKeyValues: null // No cache in fallback path
-          };
+          const beamCandidates: { val: number; idx: number }[] = [];
 
-          if (result && typeof (result as any).dispose === 'function') {
-            (result as any).dispose();
-          }
+          for (let i = 0; i < vocabSize; i++) {
+            let score = beamLogits[i];
+            // Repetition Penalty
+            if (repetitionPenalty !== 1.0 && currentTokens.has(i)) {
+              score = score < 0 ? score * repetitionPenalty : score / repetitionPenalty;
+            }
 
-          return { type: 'new', candidates: [newCandidate] };
-        }
+            score = score - logSumExp + currentBeamScore; // Add cumulative score
 
-        // Apply Repetition Penalty
-        if (repetitionPenalty !== 1.0) {
-          const counts = new Map<number, number>();
-          for (const token of beam.tokens) {
-            counts.set(token, (counts.get(token) || 0) + 1);
-          }
-          for (const [token] of counts) {
-            if (token < logitsData.length) {
-              const val = logitsData[token];
-              logitsData[token] = val < 0 ? val * repetitionPenalty : val / repetitionPenalty;
+            // Maintain top K (numBeams) for this single beam
+            // This ensures we have enough to fill global numBeams even if other beams die
+            if (beamCandidates.length < numBeams) {
+              beamCandidates.push({ val: score, idx: i });
+              beamCandidates.sort((x, y) => x.val - y.val); // Ascending (min at 0)
+            } else if (score > beamCandidates[0].val) {
+              beamCandidates[0] = { val: score, idx: i };
+              beamCandidates.sort((x, y) => x.val - y.val);
             }
           }
-        }
 
-        // Efficiently calculate LogSoftmax and Top-K without full array allocations
-        let maxLogit = -Infinity;
-        for (let i = 0; i < logitsData.length; i++) {
-          if (logitsData[i] > maxLogit) maxLogit = logitsData[i];
-        }
-
-        let expSum = 0;
-        for (let i = 0; i < logitsData.length; i++) {
-          expSum += Math.exp(logitsData[i] - maxLogit);
-        }
-
-        const logSumExp = maxLogit + Math.log(expSum);
-
-        // Find top-k indices and values using a simple sorted list (K is small)
-        const topCandidates: { idx: number; val: number }[] = [];
-
-        for (let i = 0; i < logitsData.length; i++) {
-          const val = logitsData[i];
-
-          if (topCandidates.length < numBeams) {
-            topCandidates.push({ idx: i, val });
-            topCandidates.sort((a, b) => b.val - a.val);
-          } else if (val > topCandidates[topCandidates.length - 1].val) {
-            topCandidates[topCandidates.length - 1] = { idx: i, val };
-            topCandidates.sort((a, b) => b.val - a.val);
+          // Add to global
+          for (const cand of beamCandidates) {
+            candidates.push({ score: cand.val, tokenId: cand.idx, beamIdx: b });
           }
         }
 
-        // Extract the new past_key_values from outputs for reuse
-        const newPastKeyValues = outputs.past_key_values || null;
-        const beamCandidates: Beam[] = [];
+        // Dispose logits (keep newPastKeyValues)
+        if (logits.dispose) logits.dispose();
 
-        for (let i = 0; i < topCandidates.length; i++) {
-          const { idx, val } = topCandidates[i];
-          const prob = val - logSumExp;
+        // Sort global candidates
+        candidates.sort((a, b) => b.score - a.score);
 
-          // For the first candidate, we can reuse the cache directly
-          // For subsequent candidates, we need to share the reference (they'll diverge on next step)
-          beamCandidates.push({
-            tokens: [...beam.tokens, idx],
-            score: beam.score + prob,
-            done: idx === eosTokenId,
-            pastKeyValues: newPastKeyValues // Share cache reference - will be replaced on next iteration
-          });
-        }
+        // Select best `numBeams` to proceed
+        const nextBeams: typeof activeBeams = [];
+        const nextBeamIndices: number[] = []; // Which batch row they come from
 
-        // Don't dispose past_key_values from outputs - they're now owned by the candidates
-        // Only dispose logits and other non-cache outputs
-        if (outputs) {
-          const logits = outputs.logits || outputs.decoder_logits;
-          if (logits && typeof logits.dispose === 'function') {
-            logits.dispose();
+        let collected = 0;
+        for (const cand of candidates) {
+          if (collected >= numBeams && activeBeams[cand.beamIdx].tokens.length > 0) break; // Heuristic limit
+
+          const parentBeam = activeBeams[cand.beamIdx];
+
+          // If EOS
+          if (cand.tokenId === eosTokenId) {
+            finalizedCandidates.push({
+              tokens: parentBeam.tokens, // Don't include EOS in output usually, or do? Transformers includes it.
+              score: cand.score,
+              done: true
+            });
+            // We don't continue this beam.
+            // BUT we still count it towards collected? 
+            // Usually separate bucket.
+            continue;
           }
-          // Don't dispose past_key_values - it's being reused
+
+          // Create new active beam
+          if (nextBeams.length < numBeams) {
+            nextBeams.push({
+              tokens: [...parentBeam.tokens, cand.tokenId],
+              score: cand.score,
+              done: false
+            });
+            nextBeamIndices.push(cand.beamIdx);
+          }
+
+          if (nextBeams.length >= numBeams) break;
         }
 
-        return { type: 'new', candidates: beamCandidates };
+        // Prepare tensors for next step
+        if (nextBeams.length === 0) break; // All finished
 
-      } catch (error) {
-        console.error('[DEBUG] Beam step error:', error);
-        disposeCache(beam.pastKeyValues);
-        // Return mostly valid state to continue
-        const errorCandidate: Beam = { tokens: beam.tokens, score: beam.score, done: true, pastKeyValues: null };
-        return { type: 'new', candidates: [errorCandidate] };
+        // 1. Gather pastKeyValues based on nextBeamIndices
+        // Dispose old pastKeyValues
+        disposeData(pastKeyValues);
+        pastKeyValues = gatherIndices(newPastKeyValues, nextBeamIndices);
+
+        // Dispose the raw newPastKeyValues from yield (we cloned what we needed)
+        // Wait, gatherIndices creates COPIES. So we must dispose the source `newPastKeyValues` fully.
+        disposeData(newPastKeyValues);
+
+        // 2. Expand/Gather encoderOutputs
+        // If we are at step 0 (going to step 1), we expand from index 0 -> N
+        // If step > 0, we gather based on parent indices
+        const prevBatchSize = activeBeams.length;
+
+        // Optimization: If indices effectively select everything 1:1, skip gather?
+        // Rarely happens in beam search (beams diverge).
+
+        // encoderOutputs was batch size `prevBatchSize`.
+        // We need it to be `nextBeamIndices.length`.
+        // If step == 0, `encoderOutputs` batch is 1. All `nextBeamIndices` are 0.
+        const nextEncoderOutputs = gatherIndices(encoderOutputs, nextBeamIndices);
+        disposeData(encoderOutputs); // Dispose old
+        encoderOutputs = nextEncoderOutputs;
+
+        activeBeams = nextBeams;
       } finally {
-        if (decoderInputIds) decoderInputIds.dispose();
-      }
-    });
-
-    const results = await Promise.all(beamPromises);
-
-    // Flatten results
-    for (const res of results) {
-      if (res.type === 'done') {
-        allCandidates.push(res.beam as Beam);
-      } else if (res.type === 'new' && res.candidates) {
-        allCandidates.push(...(res.candidates as Beam[]));
+        if (batchPixelValues) (batchPixelValues as any).dispose();
+        // currentDecoderInputIds is disposed at the start of the next iteration
+        // or in the main finally block if the loop exits early.
       }
     }
 
-    if (allCandidates.length === 0) break;
-
-    // Keep top beams and dispose caches of pruned beams
-    allCandidates.sort((a, b) => b.score - a.score);
-    const keptBeams = allCandidates.slice(0, numBeams);
-    const prunedBeams = allCandidates.slice(numBeams);
-
-    // Track which caches are still in use (shared references)
-    const keptCaches = new Set(keptBeams.map(b => b.pastKeyValues));
-
-    // Dispose caches that are no longer referenced by any kept beam
-    for (const pruned of prunedBeams) {
-      if (pruned.pastKeyValues && !keptCaches.has(pruned.pastKeyValues)) {
-        disposeCache(pruned.pastKeyValues);
-      }
-    }
-
-    beams = keptBeams;
-
-    // Check if all done
-    if (beams.every(b => b.done)) break;
+  } catch (e) {
+    if ((e as Error).message === "Aborted") throw e;
+    console.error("Beam search error:", e);
+    throw e;
+  } finally {
+    disposeData(encoderOutputs);
+    disposeData(pastKeyValues);
+    if (currentDecoderInputIds) currentDecoderInputIds.dispose();
   }
 
-  // Decode beams to candidates
-  const candidates: string[] = [];
-  beams.sort((a, b) => b.score - a.score);
+  // Merge active beams into finalized if any remain
+  for (const beam of activeBeams) {
+    finalizedCandidates.push(beam as Beam);
+  }
 
-  for (const beam of beams) {
+  // Sort and decode
+  finalizedCandidates.sort((a, b) => b.score - a.score);
+
+  const results: string[] = [];
+  for (const cand of finalizedCandidates.slice(0, numBeams)) {
     try {
-      const text = tokenizer.decode(beam.tokens, { skip_special_tokens: true });
-      if (text && !candidates.includes(text)) {
-        candidates.push(text);
-      }
-    } catch (e) {
-      console.error('[DEBUG] Decode error:', e);
-    }
-    // Dispose remaining caches
-    disposeCache(beam.pastKeyValues);
+      const text = tokenizer.decode(cand.tokens, { skip_special_tokens: true });
+      if (!results.includes(text)) results.push(text);
+    } catch (e) { }
   }
 
-  // Dispose encoder outputs at the very end
-  if (encoderOutputs) {
-    for (const key in encoderOutputs) {
-      const val = encoderOutputs[key];
-      if (val && typeof val.dispose === 'function') {
-        val.dispose();
-      }
-    }
-  }
-
-  return candidates;
+  return results;
 }

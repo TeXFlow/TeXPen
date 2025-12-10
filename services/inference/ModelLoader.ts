@@ -67,6 +67,9 @@ export class ModelLoader {
 
     if (onProgress) onProgress(`Checking models...`, 0);
 
+    if (onProgress) onProgress(`Checking models...`, 0);
+
+    // Download sequentially to avoid OOM
     const downloadPromises = commonFiles.map(async (file) => {
       const fileUrl = `https://huggingface.co/${modelId}/resolve/main/${file}`;
       try {

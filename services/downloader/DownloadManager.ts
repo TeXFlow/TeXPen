@@ -5,6 +5,9 @@ import { env } from '@huggingface/transformers';
 export class DownloadManager {
   private static instance: DownloadManager;
   private activeDownloads: Map<string, Promise<void>> = new Map();
+  private queue: Array<() => Promise<void>> = [];
+  private runningCount: number = 0;
+  private readonly MAX_CONCURRENT = 3;
 
   private constructor() { }
 
@@ -19,40 +22,78 @@ export class DownloadManager {
    * Ensures a file is fully downloaded and cached in the Transformers cache.
    * Resumes from IndexedDB if interrupted.
    */
-  public async downloadFile(url: string, onProgress?: (progress: DownloadProgress) => void): Promise<void> {
-    // 1. Check if already in browser Cache Storage (transformers.js default location)
-    // @ts-ignore - env.cacheName exists in runtime
-    const cacheName = env.cacheName || 'transformers-cache';
-    const cache = await caches.open(cacheName);
-    const cachedResponse = await cache.match(url);
-
-    if (cachedResponse) {
-      const contentLength = cachedResponse.headers.get('Content-Length');
-      const expectedSize = contentLength ? parseInt(contentLength, 10) : 0;
-      const actualBlob = await cachedResponse.clone().blob();
-
-      if (expectedSize > 0 && actualBlob.size !== expectedSize) {
-        console.warn(`[DownloadManager] Cached file ${url} is corrupted (size mismatch: ${actualBlob.size} vs ${expectedSize}). Re-downloading.`);
-        await cache.delete(url);
-      } else if (actualBlob.size === 0 && expectedSize > 0) {
-        console.warn(`[DownloadManager] Cached file ${url} is empty. Re-downloading.`);
-        await cache.delete(url);
-      } else {
-        return; // Valid cache
-      }
-    }
-
-    // Deduplicate concurrent requests for the same URL
+  public downloadFile(url: string, onProgress?: (progress: DownloadProgress) => void): Promise<void> {
+    // Deduplicate concurrent requests for the same URL immediately (synchronous check)
     if (this.activeDownloads.has(url)) {
       return this.activeDownloads.get(url)!;
     }
 
-    const downloadPromise = this._performDownload(url, cache, onProgress).finally(() => {
-      this.activeDownloads.delete(url);
+    // Wrap the download logic in a task
+    const task = async () => {
+      try {
+        // 1. Check if already in browser Cache Storage (transformers.js default location)
+        // @ts-ignore - env.cacheName exists in runtime
+        const cacheName = env.cacheName || 'transformers-cache';
+        const cache = await caches.open(cacheName);
+        const cachedResponse = await cache.match(url);
+
+        if (cachedResponse) {
+          const contentLength = cachedResponse.headers.get('Content-Length');
+          const expectedSize = contentLength ? parseInt(contentLength, 10) : 0;
+          const actualBlob = await cachedResponse.clone().blob();
+
+          if (expectedSize > 0 && actualBlob.size !== expectedSize) {
+            console.warn(`[DownloadManager] Cached file ${url} is corrupted (size mismatch: ${actualBlob.size} vs ${expectedSize}). Re-downloading.`);
+            await cache.delete(url);
+          } else if (actualBlob.size === 0 && expectedSize > 0) {
+            console.warn(`[DownloadManager] Cached file ${url} is empty. Re-downloading.`);
+            await cache.delete(url);
+          } else {
+            return; // Valid cache, skip download
+          }
+        }
+
+        await this._performDownload(url, cache, onProgress);
+      } finally {
+        this.activeDownloads.delete(url);
+        this.runningCount--;
+        this._processQueue();
+      }
+    };
+
+    // Create a controlled promise that resolves when the task actually finishes
+    const controlledPromise = new Promise<void>((resolve, reject) => {
+      const executeTask = async () => {
+        try {
+          await task();
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      };
+
+      if (this.runningCount < this.MAX_CONCURRENT) {
+        this.runningCount++;
+        executeTask();
+      } else {
+        this.queue.push(executeTask);
+      }
     });
 
-    this.activeDownloads.set(url, downloadPromise);
-    return downloadPromise;
+    this.activeDownloads.set(url, controlledPromise);
+    return controlledPromise;
+  }
+
+
+
+  private _processQueue() {
+    if (this.queue.length > 0 && this.runningCount < this.MAX_CONCURRENT) {
+      const nextTask = this.queue.shift();
+      if (nextTask) {
+        this.runningCount++;
+        nextTask();
+      }
+    }
   }
 
   private async _performDownload(url: string, cache: Cache, onProgress?: (progress: DownloadProgress) => void): Promise<void> {

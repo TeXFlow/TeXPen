@@ -194,4 +194,62 @@ describe('DownloadManager', () => {
     // Expect re-download
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+  it('should deduplicate concurrent requests for the same URL', async () => {
+    const mockUrl = 'https://example.com/duplicate.file';
+    let fetchCallCount = 0;
+
+    // Simulate a slow fetch
+    (global.fetch as any).mockImplementation(async () => {
+      fetchCallCount++;
+      await new Promise(resolve => setTimeout(resolve, 100)); // Delay
+      return {
+        ok: true,
+        headers: new Headers({ 'Content-Length': '10' }),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(10));
+            controller.close();
+          }
+        })
+      };
+    });
+
+    const p1 = downloadManager.downloadFile(mockUrl);
+    const p2 = downloadManager.downloadFile(mockUrl);
+
+    expect(p1).toBe(p2); // Same promise instance
+
+    await Promise.all([p1, p2]);
+
+    expect(fetchCallCount).toBe(1); // Only one network request
+  });
+
+  it('should limit concurrent downloads to MAX_CONCURRENT (3)', async () => {
+    const urls = ['http://1', 'http://2', 'http://3', 'http://4'];
+    let runningCount = 0;
+    let maxRunning = 0;
+
+    // Mock fetch to track concurrency
+    (global.fetch as any).mockImplementation(async (url: string) => {
+      runningCount++;
+      maxRunning = Math.max(maxRunning, runningCount);
+      await new Promise(resolve => setTimeout(resolve, 50)); // Hold connection
+      runningCount--;
+      return {
+        ok: true,
+        headers: new Headers({ 'Content-Length': '10' }),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(10));
+            controller.close();
+          }
+        })
+      };
+    });
+
+    // Fire 4 requests
+    await Promise.all(urls.map(url => downloadManager.downloadFile(url)));
+
+    expect(maxRunning).toBe(3); // Should strictly adhere to limit
+  });
 });

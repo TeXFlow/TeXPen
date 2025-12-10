@@ -81,10 +81,10 @@ export async function beamSearch(
 
     const allCandidates: Beam[] = [];
 
-    for (const beam of beams) {
+    // Parallelize processing of all beams
+    const beamPromises = beams.map(async (beam) => {
       if (beam.done) {
-        allCandidates.push(beam);
-        continue;
+        return { type: 'done', beam };
       }
 
       let decoderInputIds: Tensor | null = null;
@@ -157,17 +157,18 @@ export async function beamSearch(
           // Dispose old cache if any
           disposeCache(beam.pastKeyValues);
 
-          allCandidates.push({
+          const newCandidate = {
             tokens: [...beam.tokens, nextToken],
             score: beam.score,
             done: nextToken === eosTokenId,
             pastKeyValues: null // No cache in fallback path
-          });
+          };
 
           if (result && typeof (result as any).dispose === 'function') {
             (result as any).dispose();
           }
-          continue;
+
+          return { type: 'new', candidates: [newCandidate] };
         }
 
         // Apply Repetition Penalty
@@ -214,6 +215,7 @@ export async function beamSearch(
 
         // Extract the new past_key_values from outputs for reuse
         const newPastKeyValues = outputs.past_key_values || null;
+        const beamCandidates: Beam[] = [];
 
         for (let i = 0; i < topCandidates.length; i++) {
           const { idx, val } = topCandidates[i];
@@ -221,7 +223,7 @@ export async function beamSearch(
 
           // For the first candidate, we can reuse the cache directly
           // For subsequent candidates, we need to share the reference (they'll diverge on next step)
-          allCandidates.push({
+          beamCandidates.push({
             tokens: [...beam.tokens, idx],
             score: beam.score + prob,
             done: idx === eosTokenId,
@@ -239,12 +241,27 @@ export async function beamSearch(
           // Don't dispose past_key_values - it's being reused
         }
 
+        return { type: 'new', candidates: beamCandidates };
+
       } catch (error) {
         console.error('[DEBUG] Beam step error:', error);
         disposeCache(beam.pastKeyValues);
-        allCandidates.push({ tokens: beam.tokens, score: beam.score, done: true, pastKeyValues: null });
+        // Return mostly valid state to continue
+        const errorCandidate: Beam = { tokens: beam.tokens, score: beam.score, done: true, pastKeyValues: null };
+        return { type: 'new', candidates: [errorCandidate] };
       } finally {
         if (decoderInputIds) decoderInputIds.dispose();
+      }
+    });
+
+    const results = await Promise.all(beamPromises);
+
+    // Flatten results
+    for (const res of results) {
+      if (res.type === 'done') {
+        allCandidates.push(res.beam as Beam);
+      } else if (res.type === 'new' && res.candidates) {
+        allCandidates.push(...(res.candidates as Beam[]));
       }
     }
 

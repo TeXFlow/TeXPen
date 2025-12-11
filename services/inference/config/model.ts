@@ -34,4 +34,4 @@ export const MODEL_CONFIG = {
     PROVIDER: 'wasm',
     QUANTIZATION: 'q8',
   },
-};
+} as const;

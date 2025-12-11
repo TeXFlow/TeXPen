@@ -67,7 +67,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
                 {!isConfirming && (
                     <button
                         onClick={onDeleteClick}
-                        className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500 rounded transition-all"
+                        className="p-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500 rounded transition-all"
                     >
                         <TrashIcon />
                     </button>
@@ -97,18 +97,18 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
             {isConfirming && (
                 <div className="absolute inset-0 z-10 bg-white/90 dark:bg-black/90 backdrop-blur-sm flex items-center justify-center gap-2 rounded-xl animate-in fade-in duration-200">
                     <button
-                        onClick={onConfirmDelete}
-                        className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm"
-                        title="Confirm Delete"
-                    >
-                        <CheckIcon />
-                    </button>
-                    <button
                         onClick={onCancelDelete}
                         className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                         title="Cancel"
                     >
                         <XIcon />
+                    </button>
+                    <button
+                        onClick={onConfirmDelete}
+                        className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm"
+                        title="Confirm Delete"
+                    >
+                        <CheckIcon />
                     </button>
                 </div>
             )}

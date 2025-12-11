@@ -93,6 +93,14 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = MODE
 
     const initModel = async () => {
       try {
+        // Register quota error handler (e.g. Incognito fallback)
+        const { downloadManager } = await import('../services/downloader/DownloadManager');
+        downloadManager.setQuotaErrorHandler(async () => {
+          return window.confirm(
+            "Couldn't save checkpoints (storage options might be restricted). Continue in memory? (Progress will be lost if you refresh)"
+          );
+        });
+
         setStatus('loading');
         const msg = isLoadedFromCache ? 'Loading model from cache...' : 'Downloading model... (Inference paused)';
         setLoadingPhase(msg);
@@ -106,10 +114,6 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = MODE
           } else {
             displayPhase = phase;
           }
-
-          // if (pendingInferenceRef.current) {
-          //   displayPhase += " (Generation queued)";
-          // }
 
           setLoadingPhase(displayPhase);
 
@@ -125,6 +129,14 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = MODE
         }
       } catch (error) {
         if (isCancelled) return;
+        // Check if aborted by user
+        if ((error as any).message?.includes('aborted by user')) {
+          console.log('Model loading aborted by user.');
+          setStatus('idle');
+          setLoadingPhase('');
+          return;
+        }
+
         console.error('Failed to initialize model:', error);
         setStatus('error');
         setLoadingPhase('Failed to load model');

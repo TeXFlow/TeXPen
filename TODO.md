@@ -1,11 +1,11 @@
 Priority
 
 Bugs
-- [ ] favicon not showing on mobile
 
 Behavior
 
 Features
+- [ ] Add button to check for corrupted files/fix download in settings
 
 Visuals
 

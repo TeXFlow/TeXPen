@@ -21,6 +21,12 @@ export class DownloadManager {
     return DownloadManager.instance;
   }
 
+  private quotaErrorHandler: (() => Promise<boolean>) | null = null;
+
+  public setQuotaErrorHandler(handler: () => Promise<boolean>) {
+    this.quotaErrorHandler = handler;
+  }
+
   /**
    * Ensures a file is fully downloaded and cached in the Transformers cache.
    * Resumes from IndexedDB if interrupted.
@@ -163,14 +169,38 @@ export class DownloadManager {
     // plus the current pending buffer.
     const downloadedChunks: (Blob | Uint8Array)[] = [...chunks];
 
+    // Flag to disable IDB writes if we hit a quota error (e.g. Incognito)
+    let disableIDB = false;
+
     const flushBuffer = async () => {
       if (pendingChunks.length === 0) return;
       const mergedBlob = new Blob(pendingChunks as BlobPart[]);
 
-      // Save valid chunk to IDB
-      await saveChunk(url, mergedBlob, totalSize, chunkIndex++, etag);
+      // Save valid chunk to IDB (best effort)
+      if (!disableIDB) {
+        try {
+          await saveChunk(url, mergedBlob, totalSize, chunkIndex++, etag);
+        } catch (error) {
+          console.warn('[DownloadManager] Failed to save chunk to IndexedDB (likely quota exceeded).', error);
 
-      // Add to our final list of blobs
+          let shouldContinue = true;
+          if (this.quotaErrorHandler) {
+            shouldContinue = await this.quotaErrorHandler();
+          }
+
+          if (!shouldContinue) {
+            throw new Error('Download aborted by user due to storage quota limits.');
+          }
+
+          console.warn('[DownloadManager] Continuing download in memory-only mode.');
+          disableIDB = true;
+          // Note: We do NOT increment chunkIndex here if we failed? 
+          // Actually, chunkIndex is used for IDB keys. If we stop saving to IDB, it doesn't matter.
+          // The downloadedChunks array maintains the correct order and data.
+        }
+      }
+
+      // Add to our final list of blobs - CRITICAL: This must happen even if IDB fails
       downloadedChunks.push(mergedBlob);
 
       // Clear RAM buffer

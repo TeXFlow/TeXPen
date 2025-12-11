@@ -371,7 +371,108 @@ describe('DownloadManager', () => {
     // Verify it didn't cache the bad file
     expect(mockCachePut).not.toHaveBeenCalled();
 
+
     // It might have saved partial chunks to IDB, but the main cache should be clean.
     // Ideally we would want it to clean up IDB too, but throwing prevents usage.
+  });
+
+  it('should continue download in memory if IDB write fails (e.g. Incognito/Quota)', async () => {
+    const mockUrl = 'https://example.com/incognito.file';
+    const totalSize = 20;
+
+    // Mock saveChunk to throw error
+    (saveChunk as any).mockRejectedValue(new Error('QuotaExceededError'));
+
+    const mockContent = new Uint8Array(20).fill(1);
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(mockContent);
+        controller.close();
+      }
+    });
+
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Length': '20' }),
+      body: mockStream,
+    });
+
+    // Should NOT throw
+    await downloadManager.downloadFile(mockUrl);
+
+    // Verify warnings were logged (optional, harder to test without spying on console)
+
+    // Verify it TRIED to save to IDB (but failed)
+    expect(saveChunk).toHaveBeenCalled();
+
+    // CRITICAL: Verify file was still cached correctly despite IDB failure
+    expect(mockCachePut).toHaveBeenCalledTimes(1);
+    const response = mockCachePut.mock.calls[0][1];
+    const blob = await response.blob();
+    expect(blob.size).toBe(20);
+  });
+
+  it('should abort download if quota handler returns false (User clicks Cancel)', async () => {
+    const mockUrl = 'https://example.com/abort.file';
+
+    // Mock handler returns false (Cancel)
+    const mockHandler = vi.fn().mockResolvedValue(false);
+    downloadManager.setQuotaErrorHandler(mockHandler);
+
+    // Mock saveChunk to throw
+    (saveChunk as any).mockRejectedValue(new Error('QuotaExceeded'));
+
+    const mockContent = new Uint8Array(20).fill(1);
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(mockContent);
+        controller.close();
+      }
+    });
+
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Length': '20' }),
+      body: mockStream,
+    });
+
+    // Expect abort error
+    await expect(downloadManager.downloadFile(mockUrl)).rejects.toThrow(/aborted by user/);
+
+    expect(mockHandler).toHaveBeenCalled();
+    // Should NOT have cached anything
+    expect(mockCachePut).not.toHaveBeenCalled();
+  });
+
+  it('should continue download if quota handler returns true (User clicks OK)', async () => {
+    const mockUrl = 'https://example.com/continue.file';
+
+    // Mock handler returns true (OK)
+    const mockHandler = vi.fn().mockResolvedValue(true);
+    downloadManager.setQuotaErrorHandler(mockHandler);
+
+    // Mock saveChunk to throw
+    (saveChunk as any).mockRejectedValue(new Error('QuotaExceeded'));
+
+    const mockContent = new Uint8Array(20).fill(1);
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(mockContent);
+        controller.close();
+      }
+    });
+
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Length': '20' }),
+      body: mockStream,
+    });
+
+    // Should complete
+    await downloadManager.downloadFile(mockUrl);
+
+    expect(mockHandler).toHaveBeenCalled();
+    // Should have cached file
+    expect(mockCachePut).toHaveBeenCalledTimes(1);
   });
 });

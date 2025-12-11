@@ -7,9 +7,9 @@ import { INFERENCE_CONFIG } from '../services/inference/config';
 export function useInkModel(theme: 'light' | 'dark', quantization: string = INFERENCE_CONFIG.DEFAULT_QUANTIZATION, provider: 'webgpu' | 'wasm', customModelId: string = INFERENCE_CONFIG.MODEL_ID) {
   const [numCandidates, setNumCandidates] = useState<number>(1);
   const [config, setConfig] = useState<ModelConfig>({
-    encoderModelUrl: 'onnx-community/TexTeller3-ONNX',
-    decoderModelUrl: 'onnx-community/TexTeller3-ONNX',
-    tokenizerUrl: 'onnx-community/TexTeller3-ONNX',
+    encoderModelUrl: 'Ji-Ha/TexTeller3-ONNX-dynamic',
+    decoderModelUrl: 'Ji-Ha/TexTeller3-ONNX-dynamic',
+    tokenizerUrl: 'Ji-Ha/TexTeller3-ONNX-dynamic',
     imageSize: 448,
     encoderInputName: 'pixel_values',
     decoderInputName: 'decoder_input_ids',

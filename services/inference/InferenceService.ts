@@ -1,10 +1,22 @@
-import { AutoTokenizer, AutoModelForVision2Seq, PreTrainedModel, PreTrainedTokenizer, Tensor } from '@huggingface/transformers';
-import { removeStyle, addNewlines } from '../latexUtils';
-import { preprocess } from './imagePreprocessing';
-import { beamSearch } from './beamSearch';
-import { isWebGPUAvailable } from '../../utils/env';
-import { INFERENCE_CONFIG, getSessionOptions, getGenerationConfig } from './config';
-import { InferenceOptions, InferenceResult, VisionEncoderDecoderModel } from './types';
+import {
+  AutoTokenizer,
+  PreTrainedTokenizer,
+  Tensor,
+} from "@huggingface/transformers";
+import { removeStyle, addNewlines } from "../latexUtils";
+import { preprocess } from "./imagePreprocessing";
+import { beamSearch } from "./beamSearch";
+import { isWebGPUAvailable } from "../../utils/env";
+import {
+  INFERENCE_CONFIG,
+  getSessionOptions,
+  getGenerationConfig,
+} from "./config";
+import {
+  InferenceOptions,
+  InferenceResult,
+  VisionEncoderDecoderModel,
+} from "./types";
 
 export class InferenceService {
   private model: VisionEncoderDecoderModel | null = null;
@@ -27,7 +39,10 @@ export class InferenceService {
   private disposalGeneration: number = 0;
   private loadingMutex: Promise<void> = Promise.resolve();
 
-  public async init(onProgress?: (status: string, progress?: number) => void, options: InferenceOptions = {}): Promise<void> {
+  public async init(
+    onProgress?: (status: string, progress?: number) => void,
+    options: InferenceOptions = {}
+  ): Promise<void> {
     // If initialization is already in progress, return the existing promise
     if (this.initPromise) {
       return this.initPromise;
@@ -35,11 +50,15 @@ export class InferenceService {
 
     // Append our actual work to the mutex chain
     const work = async () => {
-      await this.runLoadingSequence(this.disposalGeneration, onProgress, options);
+      await this.runLoadingSequence(
+        this.disposalGeneration,
+        onProgress,
+        options
+      );
     };
 
     // Update the mutex - chain work onto it
-    this.loadingMutex = this.loadingMutex.then(work).catch(err => {
+    this.loadingMutex = this.loadingMutex.then(work).catch((err) => {
       console.error("Error in initialization sequence:", err);
     });
 
@@ -55,19 +74,27 @@ export class InferenceService {
 
   private async runLoadingSequence(
     localGeneration: number,
-    onProgress: ((status: string, progress?: number) => void) | undefined,
+    onProgress:
+      | ((status: string, progress?: number) => void)
+      | undefined,
     options: InferenceOptions
   ): Promise<void> {
-
     if (this.model && this.tokenizer) {
       // If the model is already loaded, but the quantization or device is different, we need to dispose and reload.
-      if ((options.dtype && (this.model as any).config.dtype !== options.dtype) ||
-        (options.device && (this.model as any).config.device !== options.device) ||
-        (options.modelId && this.currentModelId !== options.modelId)) {
-
+      if (
+        (options.dtype &&
+          (this.model as any).config.dtype !== options.dtype) ||
+        (options.device &&
+          (this.model as any).config.device !== options.device) ||
+        (options.modelId && this.currentModelId !== options.modelId)
+      ) {
         if (this.isInferring) {
-          console.warn("Changing model settings while inference is in progress.");
-          throw new Error("Cannot change model settings while an inference is in progress.");
+          console.warn(
+            "Changing model settings while inference is in progress."
+          );
+          throw new Error(
+            "Cannot change model settings while an inference is in progress."
+          );
         }
         await this.dispose();
         if (this.disposalGeneration !== localGeneration) {
@@ -86,33 +113,52 @@ export class InferenceService {
       await this.handleSessionWait(onProgress);
 
       const webgpuAvailable = await isWebGPUAvailable();
-      let device = options.device || (webgpuAvailable ? 'webgpu' : 'wasm');
-      let dtype = options.dtype || (webgpuAvailable ? INFERENCE_CONFIG.DEFAULT_QUANTIZATION : 'q8');
+      let device =
+        options.device || (webgpuAvailable ? "webgpu" : "wasm");
+      let dtype =
+        options.dtype ||
+        (webgpuAvailable
+          ? INFERENCE_CONFIG.DEFAULT_QUANTIZATION
+          : "q8");
 
       // Update current ID if provided, otherwise keep existing (or default on first run)
       if (options.modelId) {
         this.currentModelId = options.modelId;
       }
 
-      if (onProgress) onProgress(`Loading model ${this.currentModelId} (${device}, ${dtype})...`);
+      if (onProgress)
+        onProgress(
+          `Loading model ${this.currentModelId} (${device}, ${dtype})...`
+        );
 
       const sessionOptions = getSessionOptions(device, dtype);
 
       // Pre-download heavy model files using ModelLoader
-      const { modelLoader } = await import('./ModelLoader');
-      await modelLoader.preDownloadModels(this.currentModelId, sessionOptions, onProgress);
+      const { modelLoader } = await import("./ModelLoader");
+      await modelLoader.preDownloadModels(
+        this.currentModelId,
+        sessionOptions,
+        onProgress
+      );
+
+      if (onProgress) onProgress('Initializing model (compiling shaders)...');
 
       // Load Tokenizer and Model in parallel
       const [tokenizer, modelResult] = await Promise.all([
         AutoTokenizer.from_pretrained(this.currentModelId),
-        modelLoader.loadModelWithFallback(this.currentModelId, device, dtype, onProgress)
+        modelLoader.loadModelWithFallback(
+          this.currentModelId,
+          device,
+          dtype,
+          onProgress
+        ),
       ]);
 
       const { model, dtype: finalDtype } = modelResult;
 
       // CHECK GENERATION AGAIN
       if (this.disposalGeneration !== localGeneration) {
-        if (model && 'dispose' in model) {
+        if (model && "dispose" in model) {
           await (model as any).dispose();
         }
         return;
@@ -124,35 +170,44 @@ export class InferenceService {
 
       // Clear loading flag - we're done
       try {
-        sessionStorage.removeItem('__texpen_loading__');
-      } catch (e) { /* ignore */ }
+        sessionStorage.removeItem("__texpen_loading__");
+      } catch (e) {
+        /* ignore */
+      }
 
-      if (onProgress) onProgress('Ready');
+      if (onProgress) onProgress("Ready");
     } catch (error) {
-      console.error('Failed to load model:', error);
+      console.error("Failed to load model:", error);
       throw error;
     }
   }
 
-  private async handleSessionWait(onProgress?: (status: string, progress?: number) => void): Promise<void> {
-    const UNLOAD_KEY = '__texpen_unloading__';
-    const LOADING_KEY = '__texpen_loading__';
+  private async handleSessionWait(
+    onProgress?: (status: string, progress?: number) => void
+  ): Promise<void> {
+    const UNLOAD_KEY = "__texpen_unloading__";
+    const LOADING_KEY = "__texpen_loading__";
 
-    if (typeof sessionStorage !== 'undefined') {
+    if (typeof sessionStorage !== "undefined") {
       const unloadTime = sessionStorage.getItem(UNLOAD_KEY);
       const wasLoading = sessionStorage.getItem(LOADING_KEY);
 
       // If previous page was in the middle of loading, we need a longer delay
       if (wasLoading) {
-        if (onProgress) onProgress('Waiting for GPU cleanup...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        if (onProgress)
+          onProgress("Waiting for GPU cleanup...");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         sessionStorage.removeItem(LOADING_KEY);
       } else if (unloadTime) {
         const elapsed = Date.now() - parseInt(unloadTime, 10);
         if (elapsed < 3000) {
-          if (onProgress) onProgress('Cleaning up previous session...');
-          const waitTime = Math.min(1500, Math.max(500, 1500 - elapsed));
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+          if (onProgress)
+            onProgress("Cleaning up previous session...");
+          const waitTime = Math.min(
+            1500,
+            Math.max(500, 1500 - elapsed)
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
       }
       sessionStorage.removeItem(UNLOAD_KEY);
@@ -162,7 +217,6 @@ export class InferenceService {
     }
   }
 
-
   private abortController: AbortController | null = null;
   private currentInferencePromise: Promise<void> | null = null;
   private isProcessingQueue: boolean = false;
@@ -170,34 +224,36 @@ export class InferenceService {
 
   private pendingRequestTimestamp: number = 0;
 
-
   private pendingRequest: {
     blob: Blob;
     numCandidates: number;
-    resolve: (value: InferenceResult | PromiseLike<InferenceResult>) => void;
+    resolve: (
+      value: InferenceResult | PromiseLike<InferenceResult>
+    ) => void;
     reject: (reason?: any) => void;
   } | null = null;
 
-
-
-  public async infer(imageBlob: Blob, numCandidates: number = 1): Promise<InferenceResult> {
+  public async infer(
+    imageBlob: Blob,
+    numCandidates: number = 1
+  ): Promise<InferenceResult> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error("Skipped"));
       }
 
-
-
       this.pendingRequest = {
         blob: imageBlob,
         numCandidates,
         resolve,
-        reject
+        reject,
       };
       this.pendingRequestTimestamp = Date.now();
 
       if (this.isInferring && this.abortController) {
-        console.log('[InferenceService] New request while inferring. Aborting current inference immediately.');
+        console.log(
+          "[InferenceService] New request while inferring. Aborting current inference immediately."
+        );
         this.abortController.abort();
       }
 
@@ -212,13 +268,19 @@ export class InferenceService {
     });
   }
 
-  private async runInference(req: NonNullable<typeof this.pendingRequest>, signal: AbortSignal): Promise<void> {
+  private async runInference(
+    req: NonNullable<typeof this.pendingRequest>,
+    signal: AbortSignal
+  ): Promise<void> {
     let pixelValues: Tensor | null = null;
-    let debugImage: string = '';
+    let debugImage = "";
 
-    // Timing instrumentation (only log in development)
     const isDev = (import.meta as any).env?.DEV ?? false;
-    const timings: { preprocess?: number; generation?: number; total?: number } = {};
+    const timings: {
+      preprocess?: number;
+      generation?: number;
+      total?: number;
+    } = {};
     const startTotal = performance.now();
 
     try {
@@ -227,18 +289,27 @@ export class InferenceService {
       }
       if (signal.aborted) throw new Error("Aborted");
 
+      // 1) Preprocess image -> pixelValues
       const startPreprocess = performance.now();
-      const { tensor, debugImage: dbgImg } = await preprocess(req.blob);
+      const { tensor, debugImage: dbgImg } = await preprocess(
+        req.blob
+      );
       pixelValues = tensor;
       debugImage = dbgImg;
       timings.preprocess = performance.now() - startPreprocess;
 
       if (signal.aborted) throw new Error("Aborted");
 
-      const generationConfig = getGenerationConfig(this.dtype, this.tokenizer!);
-      const repetitionPenalty = generationConfig.repetition_penalty || 1.0;
+      // 2) Generation config (max tokens, repetition penalty, etc.)
+      const generationConfig = getGenerationConfig(
+        this.dtype,
+        this.tokenizer!
+      );
+      const repetitionPenalty =
+        generationConfig.repetition_penalty || 1.0;
       const effectiveNumBeams = req.numCandidates;
 
+      // 3) Batched beam search
       const startGeneration = performance.now();
       let candidates = await beamSearch(
         this.model!,
@@ -247,35 +318,43 @@ export class InferenceService {
         effectiveNumBeams,
         signal,
         generationConfig.max_new_tokens,
-        repetitionPenalty
+        repetitionPenalty,
+        generationConfig.decoder_start_token_id
       );
       timings.generation = performance.now() - startGeneration;
 
-      candidates = candidates.map(c => this.postprocess(c));
-
       if (signal.aborted) throw new Error("Aborted");
 
+      // 4) Post-process LaTeX
+      candidates = candidates.map((c) => this.postprocess(c));
       timings.total = performance.now() - startTotal;
 
-      // Log timing info in development
       if (isDev) {
-        console.log(`[InferenceService] Timing: preprocess=${timings.preprocess?.toFixed(1)}ms, generation=${timings.generation?.toFixed(1)}ms, total=${timings.total?.toFixed(1)}ms`);
+        console.log(
+          `[InferenceService] Timing: ` +
+          `preprocess=${timings.preprocess?.toFixed(
+            1
+          )}ms, ` +
+          `generation=${timings.generation?.toFixed(
+            1
+          )}ms, ` +
+          `total=${timings.total?.toFixed(1)}ms`
+        );
       }
 
       req.resolve({
-        latex: candidates[0] || '',
+        latex: candidates[0] || "",
         candidates,
-        debugImage
+        debugImage,
       });
-
     } catch (e: any) {
-      if (e.message === 'Skipped') {
+      if (e.message === "Skipped") {
         req.reject(e);
-      } else if (e.message === 'Aborted' || signal.aborted) {
-        console.warn('[InferenceService] Inference aborted.');
+      } else if (e.message === "Aborted" || signal.aborted) {
+        console.warn("[InferenceService] Inference aborted.");
         req.reject(new Error("Aborted"));
       } else {
-        console.error('[InferenceService] Error:', e);
+        console.error("[InferenceService] Error:", e);
         req.reject(e);
       }
     } finally {
@@ -297,8 +376,14 @@ export class InferenceService {
     try {
       while (this.pendingRequest) {
         if (this.currentInferencePromise && this.isInferring) {
-          console.log('[InferenceService] Waiting for current inference to finish or abort...');
-          try { await this.currentInferencePromise; } catch (e) { /* ignore */ }
+          console.log(
+            "[InferenceService] Waiting for current inference to finish or abort..."
+          );
+          try {
+            await this.currentInferencePromise;
+          } catch (e) {
+            /* ignore */
+          }
         }
 
         if (!this.pendingRequest) break;
@@ -306,8 +391,6 @@ export class InferenceService {
         const req = this.pendingRequest;
         this.pendingRequest = null;
         this.pendingRequestTimestamp = 0;
-
-
 
         this.isInferring = true;
         this.abortController = new AbortController();
@@ -320,7 +403,9 @@ export class InferenceService {
         } else {
           await Promise.race([
             this.currentInferencePromise,
-            new Promise<void>(resolve => { this.wakeQueuePromise = resolve; })
+            new Promise<void>((resolve) => {
+              this.wakeQueuePromise = resolve;
+            }),
           ]);
         }
       }
@@ -337,7 +422,9 @@ export class InferenceService {
 
   public async dispose(force: boolean = false): Promise<void> {
     if (this.isInferring && !force) {
-      console.warn("Attempting to dispose model while inference is in progress. Ignoring (unless forced).");
+      console.warn(
+        "Attempting to dispose model while inference is in progress. Ignoring (unless forced)."
+      );
       return;
     }
 
@@ -369,7 +456,10 @@ export class InferenceService {
     this.isInferring = false;
 
     if (this.model) {
-      if ('dispose' in this.model && typeof (this.model as any).dispose === 'function') {
+      if (
+        "dispose" in this.model &&
+        typeof (this.model as any).dispose === "function"
+      ) {
         try {
           await (this.model as any).dispose();
         } catch (e) {
@@ -400,7 +490,9 @@ export class InferenceService {
     if (this.pendingRequest) {
       try {
         this.pendingRequest.reject(new Error("Aborted"));
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
       this.pendingRequest = null;
     }
 
@@ -410,7 +502,10 @@ export class InferenceService {
     if (this.model) {
       const modelRef = this.model;
       this.model = null;
-      if ('dispose' in modelRef && typeof (modelRef as any).dispose === 'function') {
+      if (
+        "dispose" in modelRef &&
+        typeof (modelRef as any).dispose === "function"
+      ) {
         // Trigger dispose but don't wait - browser is unloading
         Promise.resolve().then(() => {
           try {
@@ -436,7 +531,7 @@ declare global {
 
 function getOrCreateInstance(): InferenceService {
   // In browser, use window-based singleton
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     if (!window.__texpen_inference_service__) {
       window.__texpen_inference_service__ = new (InferenceService as any)();
     }
@@ -450,12 +545,17 @@ export const inferenceService = getOrCreateInstance();
 
 // Cleanup on page unload (F5 refresh, tab close, etc.)
 // Use disposeSync since beforeunload doesn't wait for async operations
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
     // Mark that we're unloading so the next init can add a delay
     try {
-      sessionStorage.setItem('__texpen_unloading__', Date.now().toString());
-    } catch (e) { /* ignore storage errors */ }
+      sessionStorage.setItem(
+        "__texpen_unloading__",
+        Date.now().toString()
+      );
+    } catch (e) {
+      /* ignore storage errors */
+    }
     getOrCreateInstance().disposeSync();
   });
 }

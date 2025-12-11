@@ -107,7 +107,7 @@ describe('useInkModel', () => {
 
     it('allows inference when loaded from cache (auto confirmed)', async () => {
         // Mock cache hit
-        mockCache.keys.mockResolvedValue([{ url: 'https://cdn.huggingface.co/onnx-community/TexTeller3-ONNX/model_quantized.onnx' }]); // Partial match check in hook
+        mockCache.keys.mockResolvedValue([{ url: 'https://cdn.huggingface.co/Ji-Ha/TexTeller3-ONNX-dynamic/model_quantized.onnx' }]); // Partial match check in hook
 
         const { result } = renderHook(() => useInkModel('light', 'q4', 'wasm'));
 

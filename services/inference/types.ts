@@ -29,12 +29,14 @@ export interface InferenceOptions {
   modelId?: string;
 }
 
-export interface Beam {
+export interface BeamState {
   tokens: number[];
   score: number;
   done: boolean;
-  pastKeyValues?: any; // Cached decoder state for KV-cache optimization
+  parentIndex: number;
 }
+export type Beam = BeamState; // Alias for backward compatibility if needed
+
 
 // Helper alignment for transformers.js models which often lack precise types
 export type VisionEncoder = (inputs: { pixel_values: Tensor }) => Promise<any>;

@@ -1,10 +1,10 @@
 export const INFERENCE_CONFIG = {
-  MODEL_ID: 'onnx-community/TexTeller3-ONNX',
+  MODEL_ID: 'Ji-Ha/TexTeller3-ONNX-dynamic',
   DEFAULT_QUANTIZATION: 'fp32',
-  DEFAULT_PROVIDER: 'webgpu', // Note: Service detects WebGPU support, this is just a fallback/default string
+  DEFAULT_PROVIDER: 'webgpu',
 
   // Generation defaults
-  MAX_NEW_TOKENS: 256,
+  MAX_NEW_TOKENS: 20,
   NUM_BEAMS: 1,
   DO_SAMPLE: false,
 
@@ -13,41 +13,35 @@ export const INFERENCE_CONFIG = {
 };
 
 export function getSessionOptions(device: string, dtype: string) {
-  let sessionOptions: any = {
-    device: device,
-    dtype: dtype,
-  };
-
+  // We’ll always choose explicit files per dtype
   if (dtype === 'fp16') {
-    // Mixed Precision: Encoder (FP32) + Decoder (FP16)
-    // This prevents encoder instability while keeping decoder speed.
-    sessionOptions = {
-      device: device,
+    return {
+      device,
       dtype: {
         encoder_model: 'fp32',
-        decoder_model_merged: 'fp16',
         decoder_with_past_model: 'fp16',
       },
-      // Explicitly point to the files
-      encoder_model_file_name: 'encoder_model.onnx', // Default FP32
+      encoder_model_file_name: 'encoder_model_fp16.onnx', // or 'encoder_model.onnx' if you prefer mixed
       decoder_model_file_name: 'decoder_with_past_model_fp16.onnx',
     };
-  } else if (dtype === 'q8') {
-    sessionOptions = {
-      ...sessionOptions,
+  }
+
+  if (dtype === 'q8') {
+    return {
+      device,
+      dtype: 'q8',
       encoder_model_file_name: 'encoder_model_int8.onnx',
       decoder_model_file_name: 'decoder_with_past_model_int8.onnx',
     };
   }
-  // For fp32 (default), we rely on standard naming or explicit defaults if needed.
-  if (!sessionOptions.encoder_model_file_name) {
-    sessionOptions.encoder_model_file_name = 'encoder_model.onnx';
-  }
-  if (!sessionOptions.decoder_model_file_name) {
-    sessionOptions.decoder_model_file_name = 'decoder_model_merged.onnx';
-  }
 
-  return sessionOptions;
+  // default: fp32 with KV cache
+  return {
+    device,
+    dtype: 'fp32',
+    encoder_model_file_name: 'encoder_model.onnx',
+    decoder_model_file_name: 'decoder_with_past_model.onnx',
+  };
 }
 
 export function getGenerationConfig(dtype: string, tokenizer: any) {
@@ -58,7 +52,7 @@ export function getGenerationConfig(dtype: string, tokenizer: any) {
     pad_token_id: tokenizer.pad_token_id,
     eos_token_id: tokenizer.eos_token_id,
     bos_token_id: tokenizer.bos_token_id,
-    decoder_start_token_id: tokenizer.bos_token_id,
+    decoder_start_token_id: 0,
     // Only apply repetition penalty for fp16 to prevent loops
     ...(dtype === 'fp16' ? { repetition_penalty: INFERENCE_CONFIG.FP16_REPETITION_PENALTY } : {}),
   };

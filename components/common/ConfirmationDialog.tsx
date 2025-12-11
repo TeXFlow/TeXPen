@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ConfirmationDialogProps {
     isOpen: boolean;
@@ -21,10 +22,17 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
     onCancel,
     isDangerous = false,
 }) => {
-    if (!isOpen) return null;
+    const [mounted, setMounted] = useState(false);
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
+    if (!isOpen || !mounted) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
@@ -50,14 +58,15 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
                     <button
                         onClick={onConfirm}
                         className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm transition-all transform active:scale-95 ${isDangerous
-                                ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
-                                : 'bg-cyan-500 hover:bg-cyan-600 shadow-cyan-500/20'
+                            ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
+                            : 'bg-cyan-500 hover:bg-cyan-600 shadow-cyan-500/20'
                             }`}
                     >
                         {confirmText}
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

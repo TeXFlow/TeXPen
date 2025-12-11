@@ -6,10 +6,10 @@ import { INFERENCE_CONFIG } from '../services/inference/config';
 
 export function useInkModel(theme: 'light' | 'dark', quantization: string = INFERENCE_CONFIG.DEFAULT_QUANTIZATION, provider: 'webgpu' | 'wasm', customModelId: string = INFERENCE_CONFIG.MODEL_ID) {
   const [numCandidates, setNumCandidates] = useState<number>(1);
-  const [doSample, setDoSample] = useState(false);
-  const [temperature, setTemperature] = useState(1.0);
-  const [topK, setTopK] = useState(50);
-  const [topP, setTopP] = useState(1.0);
+  const [doSample, setDoSample] = useState(true);
+  const [temperature, setTemperature] = useState(1.2);
+  const [topK, setTopK] = useState(20);
+  const [topP, setTopP] = useState(0.9);
 
   const [config, setConfig] = useState<ModelConfig>({
     encoderModelUrl: 'Ji-Ha/TexTeller3-ONNX-dynamic',

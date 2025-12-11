@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Select, { StylesConfig } from 'react-select';
 import { useThemeContext } from '../../contexts/ThemeContext';
 import { isWebGPUAvailable } from '../../utils/env';
+import { MODEL_CONFIG } from '../../services/inference/config';
 
 type Provider = 'webgpu' | 'wasm';
 
@@ -11,8 +12,8 @@ interface ProviderSelectorProps {
 }
 
 const providerOptions: { value: Provider, label: string }[] = [
-    { value: 'webgpu', label: 'WebGPU (Fastest)' },
-    { value: 'wasm', label: 'WASM (Most Compatible, CPU)' },
+    { value: MODEL_CONFIG.PROVIDERS.WEBGPU as Provider, label: 'WebGPU (Fastest)' },
+    { value: MODEL_CONFIG.PROVIDERS.WASM as Provider, label: 'WASM (Most Compatible, CPU)' },
 ];
 
 export function ProviderSelector({ value, onChange }: ProviderSelectorProps) {
@@ -22,7 +23,7 @@ export function ProviderSelector({ value, onChange }: ProviderSelectorProps) {
     useEffect(() => {
         isWebGPUAvailable().then(available => {
             if (!available) {
-                setAvailableProviders(providerOptions.filter(p => p.value !== 'webgpu'));
+                setAvailableProviders(providerOptions.filter(p => p.value !== MODEL_CONFIG.PROVIDERS.WEBGPU));
             }
         });
     }, []);

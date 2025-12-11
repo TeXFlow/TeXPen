@@ -1,7 +1,7 @@
 
 import { AutoModelForVision2Seq, PreTrainedModel } from '@huggingface/transformers';
 import { VisionEncoderDecoderModel } from './types';
-import { getSessionOptions } from './config';
+import { getSessionOptions, MODEL_CONFIG } from './config';
 
 export class ModelLoader {
   private static instance: ModelLoader;
@@ -105,7 +105,7 @@ export class ModelLoader {
 
       const isUnsupportedDeviceError = loadError?.message?.includes('Unsupported device');
 
-      if ((isWebGPUMemoryError || isUnsupportedDeviceError) && device === 'webgpu') {
+      if ((isWebGPUMemoryError || isUnsupportedDeviceError) && device === MODEL_CONFIG.PROVIDERS.WEBGPU) {
         if (isWebGPUMemoryError) {
           console.warn('[ModelLoader] WebGPU buffer allocation failed, falling back to WASM...');
           if (onProgress) onProgress('WebGPU memory limit hit. Switching to WASM...');
@@ -115,8 +115,8 @@ export class ModelLoader {
         }
 
         // Retry with WASM
-        device = 'wasm';
-        dtype = 'q8';
+        device = MODEL_CONFIG.FALLBACK.PROVIDER;
+        dtype = MODEL_CONFIG.FALLBACK.QUANTIZATION;
         sessionOptions = getSessionOptions(device, dtype);
 
         // Explicitly download the WASM model files so the user sees progress

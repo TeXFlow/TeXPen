@@ -119,12 +119,12 @@ export class InferenceService {
 
       const webgpuAvailable = await isWebGPUAvailable();
       let device =
-        options.device || (webgpuAvailable ? "webgpu" : "wasm");
+        options.device || (webgpuAvailable ? MODEL_CONFIG.PROVIDERS.WEBGPU : MODEL_CONFIG.PROVIDERS.WASM);
       let dtype =
         options.dtype ||
         (webgpuAvailable
           ? MODEL_CONFIG.DEFAULT_QUANTIZATION
-          : "q8");
+          : MODEL_CONFIG.QUANTIZATION.Q8);
 
       // Update current ID if provided, otherwise keep existing (or default on first run)
       if (options.modelId) {

@@ -1,6 +1,7 @@
 import React from 'react';
 import Select, { StylesConfig } from 'react-select';
 import { useThemeContext } from '../../contexts/ThemeContext';
+import { MODEL_CONFIG } from '../../services/inference/config';
 
 interface QuantizationSelectorProps {
     value: string;
@@ -8,9 +9,9 @@ interface QuantizationSelectorProps {
 }
 
 const options = [
-    { value: 'fp32', label: 'FP32 (Default)' },
-    { value: 'fp16', label: 'FP16 (Disabled - Bad Performance)', isDisabled: true },
-    { value: 'q8', label: 'INT8 (Disabled - Bad Performance)', isDisabled: true },
+    { value: MODEL_CONFIG.QUANTIZATION.FP32, label: 'FP32 (Default)' },
+    { value: MODEL_CONFIG.QUANTIZATION.FP16, label: 'FP16 (Disabled - Bad Performance)', isDisabled: true },
+    { value: MODEL_CONFIG.QUANTIZATION.Q8, label: 'INT8 (Disabled - Bad Performance)', isDisabled: true },
 ];
 
 export function QuantizationSelector({ value, onChange }: QuantizationSelectorProps) {

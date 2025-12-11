@@ -19,4 +19,19 @@ export const MODEL_CONFIG = {
     BOS: '<s>',
     PAD: '<pad>',
   },
+
+  // Environment / Backend
+  PROVIDERS: {
+    WEBGPU: 'webgpu',
+    WASM: 'wasm',
+  },
+  QUANTIZATION: {
+    FP32: 'fp32',
+    FP16: 'fp16',
+    Q8: 'q8',
+  },
+  FALLBACK: {
+    PROVIDER: 'wasm',
+    QUANTIZATION: 'q8',
+  },
 };

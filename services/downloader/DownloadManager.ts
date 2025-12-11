@@ -9,6 +9,8 @@ export class DownloadManager {
   private runningCount: number = 0;
   private readonly MAX_CONCURRENT = 3;
   private readonly ENABLE_CORRUPTION_CHECK = false;
+  // Lower threshold to 10MB for mobile stability (was 50MB)
+  private readonly BUFFER_THRESHOLD = 10 * 1024 * 1024;
 
   private constructor() { }
 
@@ -155,12 +157,23 @@ export class DownloadManager {
     // Buffer for saving chunks to IDB less frequently (optimization)
     let pendingChunks: Uint8Array[] = [];
     let pendingSize = 0;
-    const BUFFER_THRESHOLD = 50 * 1024 * 1024; // 50MB
+
+    // We no longer keep ALL raw chunks in memory to avoid OOM.
+    // We only keep the chunks we've already converted to Blobs (flushed)
+    // plus the current pending buffer.
+    const downloadedChunks: (Blob | Uint8Array)[] = [...chunks];
 
     const flushBuffer = async () => {
       if (pendingChunks.length === 0) return;
       const mergedBlob = new Blob(pendingChunks as BlobPart[]);
+
+      // Save valid chunk to IDB
       await saveChunk(url, mergedBlob, totalSize, chunkIndex++, etag);
+
+      // Add to our final list of blobs
+      downloadedChunks.push(mergedBlob);
+
+      // Clear RAM buffer
       pendingChunks = [];
       pendingSize = 0;
     };
@@ -176,11 +189,11 @@ export class DownloadManager {
       if (value) {
         receivedLength += value.length;
 
-        chunks.push(value);
+        // Don't push to 'chunks' array anymore, just the pending buffer
         pendingChunks.push(value);
         pendingSize += value.byteLength;
 
-        if (pendingSize >= BUFFER_THRESHOLD) {
+        if (pendingSize >= this.BUFFER_THRESHOLD) {
           await flushBuffer();
         }
 
@@ -197,10 +210,11 @@ export class DownloadManager {
     console.log(`[DownloadManager] Download complete for ${url}. Assembling and caching...`);
 
     // 4. Assemble and store in Cache API
-    const fullBlob = new Blob(chunks as BlobPart[], { type: 'application/octet-stream' });
+    // downloadedChunks now contains only Blobs (or initial Uint8Arrays from partial resume)
+    const fullBlob = new Blob(downloadedChunks as BlobPart[], { type: 'application/octet-stream' });
 
     // Release memory held by chunks array immediately
-    chunks = [];
+    // chunks reference is local and will be GC'd, downloadedChunks is used for fullBlob then dropped
 
     const fullResponse = new Response(fullBlob, {
       headers: {

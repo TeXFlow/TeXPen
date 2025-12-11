@@ -288,4 +288,61 @@ describe('DownloadManager', () => {
 
     expect(maxRunning).toBe(3); // Should strictly adhere to limit
   });
+
+  it('should flush buffer periodically when chunks exceed buffer threshold (mobile behavior)', async () => {
+    // 1. Setup: Patch BUFFER_THRESHOLD to a small value (50 bytes)
+    // We cast to any because it's a private property
+    (downloadManager as any).BUFFER_THRESHOLD = 50;
+
+    const mockUrl = 'https://example.com/mobile-large.bin';
+
+    // 2. Simulate stream larger than threshold (e.g. 150 bytes)
+    // We expect 3 flushes (50, 100, 150)
+    const chunkSize = 10;
+    const totalSize = 150;
+    const mockContent = new Uint8Array(totalSize).fill(1); // 150 bytes of 1s
+
+    const mockStream = new ReadableStream({
+      start(controller) {
+        for (let i = 0; i < totalSize; i += chunkSize) {
+          controller.enqueue(mockContent.slice(i, i + chunkSize));
+        }
+        controller.close();
+      }
+    });
+
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Length': totalSize.toString(), 'Etag': 'mobile-test' }),
+      body: mockStream,
+    });
+
+    // 3. Run download
+    await downloadManager.downloadFile(mockUrl);
+
+    // 4. Verification:
+    // With threshold 50 and total 150 is exactly 3 flushes?
+    // Logic: pendingSize >= BUFFER_THRESHOLD.
+    // Chunk flow: 
+    // ... adds up to 50 -> flush -> saveChunk(index 0, size 50)
+    // ... adds up to 50 -> flush -> saveChunk(index 1, size 50)
+    // ... adds up to 50 -> flush -> saveChunk(index 2, size 50)
+
+    // Note: depending on loop timing (async), it might flush at end too if last chunk fits exactly.
+    // If pending is 0 at end, flushBuffer returns early.
+    // So we expect roughly 3 calls to saveChunk.
+
+    expect(saveChunk).toHaveBeenCalledTimes(3);
+
+    // Verify arguments of calls
+    expect(saveChunk).toHaveBeenCalledWith(mockUrl, expect.any(Blob), totalSize, 0, 'mobile-test'); // index 0
+    expect(saveChunk).toHaveBeenCalledWith(mockUrl, expect.any(Blob), totalSize, 1, 'mobile-test'); // index 1
+    expect(saveChunk).toHaveBeenCalledWith(mockUrl, expect.any(Blob), totalSize, 2, 'mobile-test'); // index 2
+
+    // Verify final cache put is full size
+    expect(mockCachePut).toHaveBeenCalledTimes(1);
+    const response = mockCachePut.mock.calls[0][1];
+    const blob = await response.blob();
+    expect(blob.size).toBe(totalSize);
+  });
 });

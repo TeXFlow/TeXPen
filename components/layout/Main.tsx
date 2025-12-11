@@ -12,6 +12,7 @@ import VisualDebugger from '../debug/VisualDebugger';
 import DrawTab from './DrawTab';
 import UploadTab from './UploadTab';
 import { MobileBottomNav } from './MobileBottomNav';
+import { ConfirmationDialog } from '../common/ConfirmationDialog';
 
 const Main: React.FC = () => {
     const [isPromptDismissed, setIsPromptDismissed] = useState(false);
@@ -36,6 +37,8 @@ const Main: React.FC = () => {
         setUploadPreview,
         setShowUploadResult,
         customNotification,
+        dialogConfig,
+        closeDialog
     } = useAppContext();
 
     const { theme } = useThemeContext();
@@ -218,6 +221,16 @@ const Main: React.FC = () => {
                     onDismiss={() => setIsPromptDismissed(true)}
                 />
             )}
+
+            <ConfirmationDialog
+                isOpen={dialogConfig.isOpen}
+                onCancel={closeDialog}
+                onConfirm={dialogConfig.onConfirm}
+                title={dialogConfig.title}
+                message={dialogConfig.message}
+                confirmText={dialogConfig.confirmText}
+                isDangerous={dialogConfig.isDangerous}
+            />
         </div>
     );
 };

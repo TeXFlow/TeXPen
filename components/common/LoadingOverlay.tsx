@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../contexts/AppContext';
+import { useVerifyDownloads } from '../../hooks/useVerifyDownloads';
 
 interface LoadingOverlayProps {
     isDismissed: boolean;
@@ -17,6 +18,8 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ isDismissed, onDismiss 
         openSettings,
         quantization,
     } = useAppContext();
+
+    const { verifyDownloads } = useVerifyDownloads();
 
     const { isInitialized } = useAppContext();
 
@@ -51,20 +54,17 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ isDismissed, onDismiss 
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4 relative transform animate-in zoom-in-95 duration-200">
                 {/* Close Button for non-error state */}
-                {!error && (
-                    <button
-                        onClick={() => {
-                            onDismiss();
-                            openSettings('modelId');
-                        }}
-                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                        title="Close and configure manually"
-                    >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                )}
+                <button
+                    onClick={() => {
+                        onDismiss();
+                    }}
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                    title="Dismiss"
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
 
                 <div className="text-center">
                     {error ? (
@@ -77,10 +77,13 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ isDismissed, onDismiss 
                                 {error}
                             </p>
                             <button
-                                onClick={() => window.location.reload()}
+                                onClick={() => {
+                                    onDismiss();
+                                    verifyDownloads();
+                                }}
                                 className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                             >
-                                Retry
+                                Verify & Repair Files
                             </button>
                         </>
                     ) : needsConfirmation ? (

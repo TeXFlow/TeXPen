@@ -90,6 +90,24 @@ export interface AppContextType {
     // Custom Notification
     customNotification: string | null;
     setCustomNotification: (msg: string | null) => void;
+
+    // Global Confirmation Dialog
+    dialogConfig: {
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        confirmText?: string;
+        isDangerous?: boolean;
+    };
+    openDialog: (config: {
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        confirmText?: string;
+        isDangerous?: boolean;
+    }) => void;
+    closeDialog: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -212,6 +230,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Custom Notification
     const [customNotification, setCustomNotification] = useState<string | null>(null);
 
+    // Dialog configuration
+    const [dialogConfig, setDialogConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        confirmText?: string;
+        isDangerous?: boolean;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+    });
+
+    const openDialog = (config: {
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        confirmText?: string;
+        isDangerous?: boolean;
+    }) => {
+        setDialogConfig({
+            isOpen: true,
+            ...config
+        });
+    };
+
+    const closeDialog = () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+    };
+
     const openSettings = (focusTarget?: 'modelId') => {
         setIsSettingsOpen(true);
         setSettingsFocus(focusTarget || null);
@@ -314,6 +364,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Custom Notification
         customNotification,
         setCustomNotification,
+
+        // Dialog
+        dialogConfig,
+        openDialog,
+        closeDialog,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

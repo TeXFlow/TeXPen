@@ -13,6 +13,7 @@ export const SettingsMenu: React.FC = () => {
     // const [isOpen, setIsOpen] = useState(false); // REMOVE local state
     const menuRef = useRef<HTMLDivElement>(null);
     const modelIdInputRef = useRef<HTMLInputElement>(null);
+    const verifyButtonRef = useRef<HTMLButtonElement>(null);
     const {
         quantization,
         setQuantization,
@@ -286,6 +287,7 @@ export const SettingsMenu: React.FC = () => {
                         <div className="p-3">
                             <div className="text-xs font-bold uppercase text-slate-400 dark:text-white/40 mb-2">Storage & Downloads</div>
                             <button
+                                ref={verifyButtonRef}
                                 onClick={async () => {
                                     const { modelLoader } = await import('../../services/inference/ModelLoader');
                                     const { downloadManager } = await import('../../services/downloader/DownloadManager');

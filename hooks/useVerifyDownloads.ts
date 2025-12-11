@@ -1,0 +1,74 @@
+import { useAppContext } from '../contexts/AppContext';
+import { MODEL_CONFIG } from '../services/inference/config';
+
+export const useVerifyDownloads = () => {
+  const {
+    setCustomNotification,
+    openDialog,
+    closeDialog,
+    provider,
+    quantization,
+    customModelId
+  } = useAppContext();
+
+  const verifyDownloads = async () => {
+    const { modelLoader } = await import('../services/inference/ModelLoader');
+    const { downloadManager } = await import('../services/downloader/DownloadManager');
+    const { getSessionOptions } = await import('../services/inference/config');
+
+    const toast = (msg: string | null) => setCustomNotification(msg);
+
+    const runVerification = async () => {
+      try {
+        toast('Verifying files...');
+        // Get options for current custom ID or default
+        const modelId = customModelId || MODEL_CONFIG.ID;
+        const sessionOptions = getSessionOptions(provider, quantization || MODEL_CONFIG.DEFAULT_QUANTIZATION);
+
+        const corrupted = await modelLoader.validateModelFiles(modelId, sessionOptions);
+
+        if (corrupted.length > 0) {
+          toast(null);
+          openDialog({
+            title: 'Corrupted Files Found',
+            message: `Found ${corrupted.length} corrupted files. Fix them now?`,
+            confirmText: 'Repair',
+            isDangerous: false,
+            onConfirm: async () => {
+              closeDialog();
+              toast('Repairing files...');
+              for (const url of corrupted) {
+                await downloadManager.deleteFromCache(url);
+              }
+              await modelLoader.preDownloadModels(modelId, sessionOptions, (status) => {
+                toast(status);
+              });
+              toast('Repaired corrupted files!');
+              setTimeout(() => toast(null), 3000);
+            }
+          });
+        } else {
+          toast('All files verified successfully.');
+          setTimeout(() => toast(null), 3000);
+        }
+      } catch (e) {
+        console.error(e);
+        toast('Error detecting corruption. Check console.');
+        setTimeout(() => toast(null), 5000);
+      }
+    };
+
+    openDialog({
+      title: 'Verify Downloads',
+      message: 'This will verify the integrity of downloaded model files and re-download any corrupted ones. Continue?',
+      confirmText: 'Verify',
+      isDangerous: false,
+      onConfirm: () => {
+        closeDialog();
+        runVerification();
+      }
+    });
+  };
+
+  return { verifyDownloads };
+};

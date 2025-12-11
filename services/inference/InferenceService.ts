@@ -17,6 +17,7 @@ import {
   InferenceOptions,
   InferenceResult,
   VisionEncoderDecoderModel,
+  SamplingOptions,
 } from "./types";
 
 export class InferenceService {
@@ -223,9 +224,13 @@ export class InferenceService {
 
   public async infer(
     imageBlob: Blob,
-    numCandidates: number = 1
+    options: SamplingOptions
   ): Promise<InferenceResult> {
-    return this.queue.infer(imageBlob, numCandidates);
+    // Default to num_beams=1 if not specified and not sampling
+    if (!options.num_beams && !options.do_sample) {
+      options.num_beams = 1;
+    }
+    return this.queue.infer(imageBlob, options);
   }
 
   private async runInference(
@@ -267,32 +272,75 @@ export class InferenceService {
       );
       const repetitionPenalty =
         generationConfig.repetition_penalty || 1.0;
-      const effectiveNumBeams = req.numCandidates;
+
+      const doSample = req.options.do_sample || false;
+      const effectiveNumBeams = req.options.num_beams || 1;
 
       // 3) Hybrid Decoding Strategy
+      // If do_sample is true, use model.generate (transformers.js supports sampling)
       // If numCandidates == 1, use optimized greedy from transformers.js directly (faster, more stable)
       // If numCandidates > 1, use custom beam search (until transformers.js supports num_return_sequences for this path)
       let candidates: string[] = [];
 
-      if (req.numCandidates === 1) {
+      if (doSample || effectiveNumBeams === 1) {
         const startGeneration = performance.now();
-        // @ts-ignore - generate signature in types might be loose, but runtime supports it
-        const outputTokenIds = await this.model!.generate({
+
+        const generateOptions: any = {
           inputs: pixelValues,
           max_new_tokens: generationConfig.max_new_tokens,
           repetition_penalty: repetitionPenalty,
           decoder_start_token_id: generationConfig.decoder_start_token_id,
-        });
+        };
+
+        if (doSample) {
+          generateOptions.do_sample = true;
+          generateOptions.temperature = req.options.temperature;
+          generateOptions.top_k = req.options.top_k;
+          generateOptions.top_p = req.options.top_p;
+
+          if (isDev) {
+            console.log('[InferenceService] Sampling options:', generateOptions);
+          }
+
+          if (effectiveNumBeams > 1) {
+            // Manual loop to ensure we get multiple candidates
+            const promises = [];
+            for (let i = 0; i < effectiveNumBeams; i++) {
+              promises.push(this.model!.generate({ ...generateOptions }));
+            }
+
+            const results = await Promise.all(promises);
+
+            for (const outputTokenIds of results) {
+              const decoded = this.tokenizer!.batch_decode(outputTokenIds, {
+                skip_special_tokens: true,
+              });
+              candidates.push(...decoded);
+            }
+          } else {
+            // Single sample
+            const outputTokenIds = await this.model!.generate(generateOptions);
+            const decoded = this.tokenizer!.batch_decode(outputTokenIds, {
+              skip_special_tokens: true,
+            });
+            candidates = decoded;
+          }
+        } else {
+          // Greedy
+          // @ts-ignore
+          const outputTokenIds = await this.model!.generate(generateOptions);
+          const decoded = this.tokenizer!.batch_decode(outputTokenIds, {
+            skip_special_tokens: true,
+          });
+          candidates = decoded;
+        }
+
         timings.generation = performance.now() - startGeneration;
 
         if (signal.aborted) throw new Error("Aborted");
-
-        const decoded = this.tokenizer!.batch_decode(outputTokenIds, {
-          skip_special_tokens: true,
-        });
-        candidates = decoded;
+        // candidates populated
       } else {
-        // Batched beam search for n > 1
+        // Batched beam search for n > 1 (Deterministic)
         const startGeneration = performance.now();
         candidates = await beamSearch(
           this.model!,
@@ -323,7 +371,7 @@ export class InferenceService {
             1
           )}ms, ` +
           `total=${timings.total?.toFixed(1)}ms` +
-          ` (mode: ${req.numCandidates === 1 ? "greedy/native" : "beam/custom"})`
+          ` (mode: ${doSample ? "sampling" : (effectiveNumBeams === 1 ? "greedy/native" : "beam/custom")})`
         );
       }
 

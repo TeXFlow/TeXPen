@@ -2,7 +2,7 @@ import { InferenceResult } from "../types";
 
 export type InferenceRequest = {
   blob: Blob;
-  numCandidates: number;
+  options: import("../types").SamplingOptions;
   resolve: (value: InferenceResult | PromiseLike<InferenceResult>) => void;
   reject: (reason?: any) => void;
 };
@@ -24,7 +24,7 @@ export class InferenceQueue {
 
   constructor(private processor: InferenceProcessor) { }
 
-  public infer(imageBlob: Blob, numCandidates: number = 1): Promise<InferenceResult> {
+  public infer(imageBlob: Blob, options: import("../types").SamplingOptions): Promise<InferenceResult> {
     return new Promise((resolve, reject) => {
       // If there's already a pending request waiting to be picked up, cancel it
       // (Debounce behavior: only processing the latest request matters)
@@ -34,7 +34,7 @@ export class InferenceQueue {
 
       this.pendingRequest = {
         blob: imageBlob,
-        numCandidates,
+        options,
         resolve,
         reject,
       };

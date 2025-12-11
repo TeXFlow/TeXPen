@@ -6,6 +6,11 @@ import { INFERENCE_CONFIG } from '../services/inference/config';
 
 export function useInkModel(theme: 'light' | 'dark', quantization: string = INFERENCE_CONFIG.DEFAULT_QUANTIZATION, provider: 'webgpu' | 'wasm', customModelId: string = INFERENCE_CONFIG.MODEL_ID) {
   const [numCandidates, setNumCandidates] = useState<number>(1);
+  const [doSample, setDoSample] = useState(false);
+  const [temperature, setTemperature] = useState(1.0);
+  const [topK, setTopK] = useState(50);
+  const [topP, setTopP] = useState(1.0);
+
   const [config, setConfig] = useState<ModelConfig>({
     encoderModelUrl: 'Ji-Ha/TexTeller3-ONNX-dynamic',
     decoderModelUrl: 'Ji-Ha/TexTeller3-ONNX-dynamic',
@@ -138,7 +143,13 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
           return reject(new Error('Failed to create blob from canvas'));
         }
         try {
-          const res = await inferenceService.infer(blob, numCandidates);
+          const res = await inferenceService.infer(blob, {
+            num_beams: numCandidates,
+            do_sample: doSample,
+            temperature,
+            top_k: topK,
+            top_p: topP,
+          });
           if (res) {
             // Map string candidates to Candidate objects
             const newCandidates = res.candidates.map((latex, index) => ({
@@ -169,7 +180,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
         }
       }, 'image/png');
     });
-  }, [numCandidates, status, userConfirmed, isLoadedFromCache]);
+  }, [numCandidates, doSample, temperature, topK, topP, status, userConfirmed, isLoadedFromCache]);
 
   const inferFromUrl = useCallback(async (url: string) => {
     // if (status === 'loading') {
@@ -219,5 +230,13 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = INFE
     setUserConfirmed,
     isLoadedFromCache,
     isInitialized,
+    doSample,
+    setDoSample,
+    temperature,
+    setTemperature,
+    topK,
+    setTopK,
+    topP,
+    setTopP,
   };
 }

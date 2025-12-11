@@ -26,6 +26,14 @@ export interface AppContextType {
     debugImage: string | null;
     numCandidates: number;
     setNumCandidates: (n: number) => void;
+    doSample: boolean;
+    setDoSample: (b: boolean) => void;
+    temperature: number;
+    setTemperature: (n: number) => void;
+    topK: number;
+    setTopK: (n: number) => void;
+    topP: number;
+    setTopP: (n: number) => void;
     quantization: string;
     setQuantization: (q: string) => void;
     provider: Provider;
@@ -106,6 +114,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isInferencing,
         numCandidates,
         setNumCandidates,
+        doSample,
+        setDoSample,
+        temperature,
+        setTemperature,
+        topK,
+        setTopK,
+        topP,
+        setTopP,
         progress,
         userConfirmed,
         setUserConfirmed,
@@ -228,6 +244,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         debugImage,
         numCandidates,
         setNumCandidates,
+        doSample,
+        setDoSample,
+        temperature,
+        setTemperature,
+        topK,
+        setTopK,
+        topP,
+        setTopP,
         quantization,
         setQuantization,
         provider,

@@ -23,6 +23,14 @@ export interface InferenceResult {
   debugImage: string;
 }
 
+export interface SamplingOptions {
+  do_sample?: boolean;
+  temperature?: number;
+  top_k?: number;
+  top_p?: number;
+  num_beams?: number; // legacy numCandidates mapping
+}
+
 export interface InferenceOptions {
   dtype?: string;
   device?: 'webgpu' | 'wasm';

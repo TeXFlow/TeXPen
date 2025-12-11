@@ -25,6 +25,17 @@ export const SettingsMenu: React.FC = () => {
         openSettings,
         closeSettings,
         settingsFocus,
+        // Sampling
+        numCandidates,
+        setNumCandidates,
+        doSample,
+        setDoSample,
+        temperature,
+        setTemperature,
+        topK,
+        setTopK,
+        topP,
+        setTopP,
     } = useAppContext();
     const { theme, toggleTheme } = useThemeContext();
     const { filterMode, setFilterMode } = useHistoryContext();
@@ -113,6 +124,103 @@ export const SettingsMenu: React.FC = () => {
                         <div className="text-xs font-bold uppercase text-slate-400 dark:text-white/40 mb-2">Quantization</div>
                         <QuantizationSelector value={quantization} onChange={setQuantization} />
                     </div> */}
+
+                    <div className="h-px bg-black/5 dark:bg-white/5 mx-2" />
+
+                    {/* Generation Settings */}
+                    <div className="p-3">
+                        <div className="text-xs font-bold uppercase text-slate-400 dark:text-white/40 mb-2">Generation</div>
+
+                        {/* Num Candidates / Beams */}
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-slate-600 dark:text-slate-300">Candidates</span>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="5"
+                                    step="1"
+                                    value={numCandidates}
+                                    onChange={(e) => setNumCandidates(parseInt(e.target.value))}
+                                    className="w-20 accent-cyan-500"
+                                />
+                                <span className="text-xs font-mono w-4 text-right text-slate-600 dark:text-slate-300">{numCandidates}</span>
+                            </div>
+                        </div>
+
+                        {/* Sampling Toggle */}
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-slate-600 dark:text-slate-300">Beam Search Approx.</span>
+                                <Tooltip content="Enable multinomial sampling to approximate beam search exploration. Faster but non-deterministic. Recommended for generating diverse candidates.">
+                                    <HelpIcon />
+                                </Tooltip>
+                            </div>
+                            <button
+                                onClick={() => setDoSample(!doSample)}
+                                className={`w-8 h-4 rounded-full transition-colors relative ${doSample ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-zinc-700'}`}
+                            >
+                                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${doSample ? 'left-4.5' : 'left-0.5'}`} />
+                            </button>
+                        </div>
+
+                        {/* Sampling Params */}
+                        {doSample && (
+                            <div className="space-y-2 pl-2 border-l-2 border-black/5 dark:border-white/5 ml-1">
+                                {/* Temperature */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Temperature</span>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="range"
+                                            min="0.1"
+                                            max="2.0"
+                                            step="0.1"
+                                            value={temperature}
+                                            onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                                            className="w-16 accent-cyan-500 h-1"
+                                        />
+                                        <span className="text-[10px] font-mono w-6 text-right text-slate-500 dark:text-slate-400">{temperature.toFixed(1)}</span>
+                                    </div>
+                                </div>
+
+                                {/* Top K */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Top K</span>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            step="1"
+                                            value={topK}
+                                            onChange={(e) => setTopK(parseInt(e.target.value))}
+                                            className="w-16 accent-cyan-500 h-1"
+                                        />
+                                        <span className="text-[10px] font-mono w-6 text-right text-slate-500 dark:text-slate-400">{topK}</span>
+                                    </div>
+                                </div>
+
+                                {/* Top P */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Top P</span>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="range"
+                                            min="0.1"
+                                            max="1.0"
+                                            step="0.05"
+                                            value={topP}
+                                            onChange={(e) => setTopP(parseFloat(e.target.value))}
+                                            className="w-16 accent-cyan-500 h-1"
+                                        />
+                                        <span className="text-[10px] font-mono w-6 text-right text-slate-500 dark:text-slate-400">{topP.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
 
                     {/* <div className="h-px bg-black/5 dark:bg-white/5 mx-2" /> */}
 

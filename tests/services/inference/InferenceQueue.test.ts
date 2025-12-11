@@ -33,7 +33,7 @@ describe("InferenceQueue", () => {
     const queue = new InferenceQueue(mockProcessor);
     const blob = new Blob(["test"], { type: "image/png" });
 
-    const result = await queue.infer(blob, 1);
+    const result = await queue.infer(blob, { num_beams: 1 });
 
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]).toBe("test");
@@ -69,9 +69,9 @@ describe("InferenceQueue", () => {
     const blob3 = new Blob(["test3"], { type: "image/png" });
 
     // Fire off multiple requests rapidly
-    const promise1 = queue.infer(blob1, 1).catch((e) => e);
-    const promise2 = queue.infer(blob2, 1).catch((e) => e);
-    const promise3 = queue.infer(blob3, 1);
+    const promise1 = queue.infer(blob1, { num_beams: 1 }).catch((e) => e);
+    const promise2 = queue.infer(blob2, { num_beams: 1 }).catch((e) => e);
+    const promise3 = queue.infer(blob3, { num_beams: 1 });
 
     // First two should be skipped/rejected, third should succeed
     const result1 = await promise1;
@@ -122,13 +122,13 @@ describe("InferenceQueue", () => {
     const blob2 = new Blob(["test2"], { type: "image/png" });
 
     // Start first request
-    const promise1 = queue.infer(blob1, 1).catch((e) => e);
+    const promise1 = queue.infer(blob1, { num_beams: 1 }).catch((e) => e);
 
     // Wait a bit for the first request to start processing
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     // Send second request which should abort the first
-    const promise2 = queue.infer(blob2, 1);
+    const promise2 = queue.infer(blob2, { num_beams: 1 });
 
     const result1 = await promise1;
     const result2 = await promise2;
@@ -166,7 +166,7 @@ describe("InferenceQueue", () => {
 
     expect(queue.getIsInferring()).toBe(false);
 
-    const promise = queue.infer(blob, 1);
+    const promise = queue.infer(blob, { num_beams: 1 });
 
     // Wait for the processor to start
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -205,7 +205,7 @@ describe("InferenceQueue", () => {
     const queue = new InferenceQueue(controlledProcessor);
     const blob = new Blob(["test"], { type: "image/png" });
 
-    const promise = queue.infer(blob, 1).catch((e) => e);
+    const promise = queue.infer(blob, { num_beams: 1 }).catch((e) => e);
 
     // Wait for processing to start
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -218,11 +218,11 @@ describe("InferenceQueue", () => {
     expect((result as Error).message).toBe("Aborted");
   });
 
-  test("passes numCandidates to processor", async () => {
-    let receivedCandidates = 0;
+  test("passes options to processor", async () => {
+    let receivedOptions: any = {};
     const trackingProcessor: InferenceProcessor = vi.fn(
       async (req: InferenceRequest, signal: AbortSignal) => {
-        receivedCandidates = req.numCandidates;
+        receivedOptions = req.options;
         const result: InferenceResult = {
           latex: "test",
           candidates: ["test"],
@@ -235,9 +235,9 @@ describe("InferenceQueue", () => {
     const queue = new InferenceQueue(trackingProcessor);
     const blob = new Blob(["test"], { type: "image/png" });
 
-    await queue.infer(blob, 5);
+    await queue.infer(blob, { num_beams: 5 });
 
-    expect(receivedCandidates).toBe(5);
+    expect(receivedOptions.num_beams).toBe(5);
 
     await queue.dispose();
   });

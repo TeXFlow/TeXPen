@@ -209,6 +209,11 @@ export class DownloadManager {
 
     console.log(`[DownloadManager] Download complete for ${url}. Assembling and caching...`);
 
+    // Validation: Ensure we actually received the full file
+    if (totalSize > 0 && receivedLength !== totalSize) {
+      throw new Error(`Download incomplete for ${url}. Expected ${totalSize} bytes, received ${receivedLength}.`);
+    }
+
     // 4. Assemble and store in Cache API
     // downloadedChunks now contains only Blobs (or initial Uint8Arrays from partial resume)
     const fullBlob = new Blob(downloadedChunks as BlobPart[], { type: 'application/octet-stream' });

@@ -345,4 +345,33 @@ describe('DownloadManager', () => {
     const blob = await response.blob();
     expect(blob.size).toBe(totalSize);
   });
+
+  it('should throw error if download stream ends prematurely (size mismatch)', async () => {
+    const mockUrl = 'https://example.com/incomplete.file';
+    const totalSize = 100;
+
+    // Simulate stream that ends after 50 bytes
+    const mockContent = new Uint8Array(50).fill(1);
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(mockContent);
+        controller.close(); // End early
+      }
+    });
+
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Length': '100', 'Etag': 'incomplete-tag' }), // Header says 100
+      body: mockStream,
+    });
+
+    // Expect error
+    await expect(downloadManager.downloadFile(mockUrl)).rejects.toThrow(/Download incomplete/);
+
+    // Verify it didn't cache the bad file
+    expect(mockCachePut).not.toHaveBeenCalled();
+
+    // It might have saved partial chunks to IDB, but the main cache should be clean.
+    // Ideally we would want it to clean up IDB too, but throwing prevents usage.
+  });
 });

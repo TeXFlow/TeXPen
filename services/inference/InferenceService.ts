@@ -309,19 +309,43 @@ export class InferenceService {
         generationConfig.repetition_penalty || 1.0;
       const effectiveNumBeams = req.numCandidates;
 
-      // 3) Batched beam search
-      const startGeneration = performance.now();
-      let candidates = await beamSearch(
-        this.model!,
-        this.tokenizer!,
-        pixelValues,
-        effectiveNumBeams,
-        signal,
-        generationConfig.max_new_tokens,
-        repetitionPenalty,
-        generationConfig.decoder_start_token_id
-      );
-      timings.generation = performance.now() - startGeneration;
+      // 3) Hybrid Decoding Strategy
+      // If numCandidates == 1, use optimized greedy from transformers.js directly (faster, more stable)
+      // If numCandidates > 1, use custom beam search (until transformers.js supports num_return_sequences for this path)
+      let candidates: string[] = [];
+
+      if (req.numCandidates === 1) {
+        const startGeneration = performance.now();
+        // @ts-ignore - generate signature in types might be loose, but runtime supports it
+        const outputTokenIds = await this.model!.generate({
+          inputs: pixelValues,
+          max_new_tokens: generationConfig.max_new_tokens,
+          repetition_penalty: repetitionPenalty,
+          decoder_start_token_id: generationConfig.decoder_start_token_id,
+        });
+        timings.generation = performance.now() - startGeneration;
+
+        if (signal.aborted) throw new Error("Aborted");
+
+        const decoded = this.tokenizer!.batch_decode(outputTokenIds, {
+          skip_special_tokens: true,
+        });
+        candidates = decoded;
+      } else {
+        // Batched beam search for n > 1
+        const startGeneration = performance.now();
+        candidates = await beamSearch(
+          this.model!,
+          this.tokenizer!,
+          pixelValues,
+          effectiveNumBeams,
+          signal,
+          generationConfig.max_new_tokens,
+          repetitionPenalty,
+          generationConfig.decoder_start_token_id
+        );
+        timings.generation = performance.now() - startGeneration;
+      }
 
       if (signal.aborted) throw new Error("Aborted");
 
@@ -338,7 +362,8 @@ export class InferenceService {
           `generation=${timings.generation?.toFixed(
             1
           )}ms, ` +
-          `total=${timings.total?.toFixed(1)}ms`
+          `total=${timings.total?.toFixed(1)}ms` +
+          ` (mode: ${req.numCandidates === 1 ? "greedy/native" : "beam/custom"})`
         );
       }
 

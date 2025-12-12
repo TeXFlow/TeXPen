@@ -146,7 +146,7 @@ export class DownloadManager {
     await this.store.deleteFile(url);
   }
 
-  public async checkCacheIntegrity(url: string): Promise<{ ok: boolean, reason?: string, missing?: boolean }> {
+  public async checkCacheIntegrity(url: string, expectedChecksum?: string): Promise<{ ok: boolean, reason?: string, missing?: boolean }> {
     // @ts-expect-error - env.cacheName exists
     const cacheName = env.cacheName || 'transformers-cache';
     const cache = await caches.open(cacheName);
@@ -162,6 +162,17 @@ export class DownloadManager {
       const blob = await cachedResponse.clone().blob();
       if (blob.size !== expectedSize) {
         return { ok: false, reason: `Size mismatch: expected ${expectedSize}, got ${blob.size}` };
+      }
+
+      if (expectedChecksum) {
+        const buffer = await blob.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+        if (hashHex !== expectedChecksum) {
+          return { ok: false, reason: `Checksum mismatch: expected ${expectedChecksum}, got ${hashHex}` };
+        }
       }
     }
 

@@ -85,16 +85,14 @@ export class ModelLoader {
   public async loadModelWithFallback(
     modelId: string,
     initialDevice: string,
-    initialDtype: string,
     onProgress?: (status: string, progress?: number) => void
   ): Promise<{ model: VisionEncoderDecoderModel, device: string, dtype: string }> {
     let device = initialDevice;
-    let dtype = initialDtype;
-    let sessionOptions = getSessionOptions(device, dtype);
+    let sessionOptions = getSessionOptions(device);
 
     try {
       const model = await AutoModelForVision2Seq.from_pretrained(modelId, sessionOptions as unknown as Record<string, unknown>) as unknown as VisionEncoderDecoderModel;
-      return { model, device, dtype };
+      return { model, device, dtype: 'fp32' };
     } catch (err: unknown) {
       const loadError = err as Error;
       // Check if this is a WebGPU buffer size / memory error OR generic unsupported device error (common in Node env)
@@ -119,16 +117,16 @@ export class ModelLoader {
           if (onProgress) onProgress('WebGPU unavailable. Switching to WASM...');
         }
 
-        // Retry with WASM
-        device = MODEL_CONFIG.FALLBACK.PROVIDER;
-        dtype = MODEL_CONFIG.FALLBACK.QUANTIZATION;
-        sessionOptions = getSessionOptions(device, dtype);
+        // Retry with WASM (still fp32 as we removed quantized models)
+        device = MODEL_CONFIG.PROVIDERS.WASM;
+        // dtype remains the same (fp32)
+        sessionOptions = getSessionOptions(device);
 
         // Explicitly download the WASM model files so the user sees progress
         await this.preDownloadModels(modelId, sessionOptions, onProgress);
 
         const model = await AutoModelForVision2Seq.from_pretrained(modelId, sessionOptions as unknown as Record<string, unknown>) as unknown as VisionEncoderDecoderModel;
-        return { model, device, dtype };
+        return { model, device, dtype: 'fp32' };
       } else {
         throw loadError;
       }
@@ -146,8 +144,11 @@ export class ModelLoader {
 
     for (const file of commonFiles) {
       const fileUrl = `https://huggingface.co/${modelId}/resolve/main/${file}`;
+      const fileName = file.split('/').pop() as keyof typeof MODEL_CONFIG.CHECKSUMS;
+      const expectedChecksum = MODEL_CONFIG.CHECKSUMS[fileName];
+
       try {
-        const result = await downloadManager.checkCacheIntegrity(fileUrl);
+        const result = await downloadManager.checkCacheIntegrity(fileUrl, expectedChecksum);
         if (!result.ok) {
           // Both missing and corrupted files need to be re-downloaded
           console.warn(`[ModelLoader] File ${result.missing ? 'missing' : 'corrupted'}: ${file}${result.reason ? ` - ${result.reason}` : ''}`);

@@ -6,35 +6,13 @@ export { MODEL_CONFIG, GENERATION_CONFIG };
 
 export interface SessionConfig {
   device: string;
-  dtype: string | { encoder_model: string; decoder_with_past_model: string; };
+  dtype: string;
   encoder_model_file_name: string;
   decoder_model_file_name: string;
 }
 
-export function getSessionOptions(device: string, dtype: string): SessionConfig {
-  // We’ll always choose explicit files per dtype
-  if (dtype === 'fp16') {
-    return {
-      device,
-      dtype: {
-        encoder_model: 'fp32',
-        decoder_with_past_model: 'fp16',
-      },
-      encoder_model_file_name: 'encoder_model_fp16.onnx', // or 'encoder_model.onnx' if you prefer mixed
-      decoder_model_file_name: 'decoder_with_past_model_fp16.onnx',
-    };
-  }
-
-  if (dtype === 'q8') {
-    return {
-      device,
-      dtype: 'q8',
-      encoder_model_file_name: 'encoder_model_int8.onnx',
-      decoder_model_file_name: 'decoder_with_past_model_int8.onnx',
-    };
-  }
-
-  // default: fp32 with KV cache
+export function getSessionOptions(device: string): SessionConfig {
+  // We only support fp32 now
   return {
     device,
     dtype: 'fp32',

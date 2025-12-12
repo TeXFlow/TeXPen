@@ -1,6 +1,7 @@
 Priority
 
 Bugs
+- [ ] Not switching to WASM when GPU not detected
 
 Behavior
 
@@ -13,3 +14,4 @@ Maintenance
 Performance
 
 Roadmap
+- [ ] TexTeller paragraph OCR

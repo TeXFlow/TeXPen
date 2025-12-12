@@ -10,7 +10,7 @@ export class DownloadManager {
   private readonly MAX_CONCURRENT = 3;
   private readonly ENABLE_CORRUPTION_CHECK = false;
   // Lower threshold to 10MB for mobile stability (was 50MB)
-  private readonly BUFFER_THRESHOLD = 10 * 1024 * 1024;
+  private readonly BUFFER_THRESHOLD = 5 * 1024 * 1024; // Further lowered to 5MB
 
   // Global state for IDB availability across all downloads in this session
   private isIDBDisabled: boolean = false;
@@ -102,6 +102,60 @@ export class DownloadManager {
     return controlledPromise;
   }
 
+  // Helper to create a stream from an array of Blobs/Uint8Arrays (Memory Mode)
+  private createBlobStream(chunks: (Blob | Uint8Array)[]): ReadableStream {
+    let index = 0;
+    return new ReadableStream({
+      async pull(controller) {
+        if (index < chunks.length) {
+          const chunk = chunks[index++];
+          if (chunk instanceof Blob) {
+            const buffer = await new Response(chunk).arrayBuffer();
+            controller.enqueue(new Uint8Array(buffer));
+          } else {
+            controller.enqueue(chunk); // Assuming Uint8Array
+          }
+        } else {
+          controller.close();
+        }
+      }
+    });
+  }
+
+  // Helper to create a stream that reads sequentially from IndexedDB (Disk Mode)
+  private createIDBStream(url: string, totalChunks: number): ReadableStream {
+    let index = 0;
+    return new ReadableStream({
+      async pull(controller) {
+        if (index < totalChunks) {
+          try {
+            const db = await getDB();
+            const entry = await db.get('downloads', url);
+
+            // Safety check: entry might have been deleted or corrupted
+            if (!entry || !entry.chunks[index]) {
+              controller.error(new Error(`Missing chunk ${index} for ${url} in IDB`));
+              return;
+            }
+
+            const chunk = entry.chunks[index];
+            if (chunk instanceof Blob) {
+              const buffer = await new Response(chunk).arrayBuffer();
+              controller.enqueue(new Uint8Array(buffer));
+            } else {
+              controller.enqueue(chunk);
+            }
+            index++;
+          } catch (e) {
+            controller.error(e);
+          }
+        } else {
+          controller.close();
+        }
+      }
+    });
+  }
+
 
 
   private _processQueue() {
@@ -171,7 +225,8 @@ export class DownloadManager {
     // We no longer keep ALL raw chunks in memory to avoid OOM.
     // We only keep the chunks we've already converted to Blobs (flushed)
     // plus the current pending buffer.
-    const downloadedChunks: (Blob | Uint8Array)[] = [...chunks];
+    // OPTIMIZATION: If IDB is enabled, we DO NOT populate this array to save RAM.
+    const downloadedChunks: (Blob | Uint8Array)[] = this.isIDBDisabled ? [...chunks] : [];
 
     // Flag to disable IDB writes if we hit a quota error (e.g. Incognito)
     // No local flag needed, use class-level property
@@ -225,7 +280,9 @@ export class DownloadManager {
       }
 
       // Add to our final list of blobs - CRITICAL: This must happen even if IDB fails
-      downloadedChunks.push(mergedBlob);
+      if (this.isIDBDisabled) {
+        downloadedChunks.push(mergedBlob);
+      }
 
       // Clear RAM buffer
       pendingChunks = [];
@@ -269,13 +326,22 @@ export class DownloadManager {
     }
 
     // 4. Assemble and store in Cache API
-    // downloadedChunks now contains only Blobs (or initial Uint8Arrays from partial resume)
-    const fullBlob = new Blob(downloadedChunks as BlobPart[], { type: 'application/octet-stream' });
+    // OPTIMIZATION: Use streams to avoid creating a massive Blob in memory
 
-    // Release memory held by chunks array immediately
-    // chunks reference is local and will be GC'd, downloadedChunks is used for fullBlob then dropped
+    let stream: ReadableStream;
+    if (this.isIDBDisabled) {
+      // Memory mode: Stream from the array of blobs we kept
+      stream = this.createBlobStream(downloadedChunks as Blob[]);
+    } else {
+      // Disk mode: Stream from IDB chunks
+      // We know how many chunks we wrote: `chunkIndex` (which is incremented post-write)
+      // actually check chunkIndex usage.
+      // In flushBuffer: chunkIndex++ happens AFTER saveChunk start.
+      // The total number of chunks written is `chunkIndex` (at loop end).
+      stream = this.createIDBStream(url, chunkIndex);
+    }
 
-    const fullResponse = new Response(fullBlob, {
+    const fullResponse = new Response(stream, {
       headers: {
         'Content-Length': totalSize.toString(),
         'Content-Type': 'application/octet-stream' // generic

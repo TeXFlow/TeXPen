@@ -11,7 +11,7 @@ vi.mock('../../../services/downloader/db', () => ({
 }));
 
 // Access mocked functions
-import { saveChunk, getPartialDownload as mockGetPartial, clearPartialDownload as mockClearPartial } from '../../../services/downloader/db';
+import { saveChunk, getDB, getPartialDownload as mockGetPartial, clearPartialDownload as mockClearPartial } from '../../../services/downloader/db';
 
 describe('DownloadManager', () => {
   let downloadManager: DownloadManager;
@@ -25,20 +25,57 @@ describe('DownloadManager', () => {
     // Patch Response to handle Blob bodies correctly in jsdom/node environment
     global.Response = class MockResponse extends OriginalResponse {
       private _blobBody: Blob | null = null;
+      private _streamBody: ReadableStream | null = null;
+
       constructor(body: BodyInit | null, init?: ResponseInit) {
-        // Pass null to super if it's a blob to prevent stringification "feature" in jsdom
-        super(body instanceof Blob ? null : body, init);
-        if (body instanceof Blob) {
+        // Pass null to super if it's a blob or stream to prevent issues in jsdom/mock
+        const isBlob = body instanceof Blob;
+        const isStream = body instanceof ReadableStream;
+
+        super(isBlob || isStream ? null : body, init);
+
+        if (isBlob) {
           this._blobBody = body;
+        }
+        if (isStream) {
+          this._streamBody = body;
         }
       }
       async blob() {
         if (this._blobBody) return this._blobBody;
+        if (this._streamBody) {
+          // Read stream to blob
+          const reader = this._streamBody.getReader();
+          const chunks = [];
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+          return new Blob(chunks);
+        }
         return super.blob();
+      }
+      async arrayBuffer() {
+        const blob = await this.blob();
+        if (blob.arrayBuffer) {
+          return blob.arrayBuffer();
+        }
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as ArrayBuffer);
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(blob);
+        });
       }
       clone() {
         // Create a new instance essentially
-        const cloned = new (global.Response as any)(this._blobBody || null, {
+        // Note: Cloning a stream body is tricky. For tests we might just reuse the ref 
+        // OR warn that we can't clone stream in this simple mock.
+        // But the real Response.clone() tees the stream.
+        // For our tests, usually we just verify the size, so maybe we don't need perfect cloning.
+        // Let's passed the stored body.
+        const cloned = new (global.Response as any)(this._blobBody || this._streamBody || null, {
           status: this.status,
           statusText: this.statusText,
           headers: this.headers
@@ -63,6 +100,22 @@ describe('DownloadManager', () => {
     mockCachePut = vi.fn().mockResolvedValue(undefined);
     mockCacheMatch = vi.fn().mockResolvedValue(null);
     mockCacheDelete = vi.fn().mockResolvedValue(true);
+
+    // Mock DB Store
+    const dbStore = new Map<string, { chunks: any[] }>();
+    (saveChunk as any).mockImplementation(async (url: string, chunk: any, total: number, index: number) => {
+      if (!dbStore.has(url)) dbStore.set(url, { chunks: [] });
+      dbStore.get(url)!.chunks[index] = chunk;
+    });
+
+    (getDB as any).mockResolvedValue({
+      get: vi.fn().mockImplementation(async (storeName: string, url: string) => {
+        return dbStore.get(url);
+      }),
+    });
+
+    // Expose dbStore for specific tests
+    (global as any).__mockDbStore = dbStore;
 
     (global as any).caches = {
       open: vi.fn().mockResolvedValue({
@@ -121,6 +174,12 @@ describe('DownloadManager', () => {
   it('should resume from partial state and append new chunks', async () => {
     const mockUrl = 'https://example.com/large.bin';
     const existingData = new Uint8Array(50).fill(1);
+
+    // SETUP: Populate the Mock DB with the existing chunk
+    const dbStore = (global as any).__mockDbStore;
+    if (dbStore) {
+      dbStore.set(mockUrl, { chunks: [new Blob([existingData])] });
+    }
 
     // Mock existing partial state
     (mockGetPartial as any).mockResolvedValue({

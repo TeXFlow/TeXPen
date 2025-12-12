@@ -15,9 +15,8 @@ export class DownloadManager {
   }
 
   // Legacy method signature compatibility
-  public setQuotaErrorHandler(_handler: () => Promise<boolean>) {
-    // V2 doesn't use this yet
-    console.warn('Quota error handler not yet implemented in V2');
+  public setQuotaErrorHandler(handler: () => Promise<boolean>) {
+    downloadScheduler.setQuotaHandler(handler);
   }
 
   public async downloadFile(url: string, onProgress?: (progress: DownloadProgress) => void): Promise<void> {
@@ -36,7 +35,7 @@ export class DownloadManager {
     }
 
     // 2. Delegate to V2 Scheduler
-    await downloadScheduler.download(url, (p) => {
+    const result = await downloadScheduler.download(url, (p) => {
       if (onProgress) {
         onProgress({
           loaded: p.loaded,
@@ -46,30 +45,45 @@ export class DownloadManager {
       }
     });
 
-    // 3. Move from IDB to Cache API
-    await this.finalizeCache(url, cache);
+    // 3. Move from IDB (or memory blob) to Cache API
+    await this.finalizeCache(url, cache, result as Blob | undefined);
   }
 
-  private async finalizeCache(url: string, cache: Cache) {
-    const store = downloadScheduler.getStore();
-    const meta = await store.getMetadata(url);
+  private async finalizeCache(url: string, cache: Cache, memoryBlob?: Blob) {
+    let response: Response;
 
-    if (!meta) throw new Error(`Download failed: Metadata missing for ${url}`);
+    if (memoryBlob) {
+      response = new Response(memoryBlob, {
+        headers: {
+          'Content-Length': memoryBlob.size.toString(),
+          'Content-Type': 'application/octet-stream'
+        }
+      });
+    } else {
+      const store = downloadScheduler.getStore();
+      const meta = await store.getMetadata(url);
 
-    // Validation
-    if (meta.downloadedBytes !== meta.totalBytes) {
-      throw new Error(`Integrity check failed: ${meta.downloadedBytes} != ${meta.totalBytes}`);
+      if (!meta) throw new Error(`Download failed: Metadata missing for ${url}`);
+
+      // Validation
+      if (meta.downloadedBytes !== meta.totalBytes) {
+        throw new Error(`Integrity check failed: ${meta.downloadedBytes} != ${meta.totalBytes}`);
+      }
+
+      const stream = await store.getStream(url, meta.chunkCount);
+      response = new Response(stream, {
+        headers: {
+          'Content-Length': meta.totalBytes.toString(),
+          'Content-Type': 'application/octet-stream'
+        }
+      });
     }
 
-    const stream = await store.getStream(url, meta.chunkCount);
-    const response = new Response(stream, {
-      headers: {
-        'Content-Length': meta.totalBytes.toString(),
-        'Content-Type': 'application/octet-stream'
-      }
-    });
-
     await cache.put(url, response);
+
+    // Cleanup: if memoryBlob used, store was cleared by Job. If not, clear now.
+    // Calling clear is safe (idempotent).
+    const store = downloadScheduler.getStore();
     await store.clear(url);
   }
 

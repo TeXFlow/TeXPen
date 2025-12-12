@@ -17,7 +17,7 @@ export class DownloadJob {
   private store: ChunkStore;
   private abortController: AbortController | null = null;
   private onProgressCallback?: (progress: DownloadProgress) => void;
-  private onCompleteCallback?: () => void;
+  private onCompleteCallback?: (result?: Blob) => void;
   private onErrorCallback?: (err: Error) => void;
 
   private bufferSize = 5 * 1024 * 1024; // 5MB buffer before flush (tuned for mobile)
@@ -27,9 +27,17 @@ export class DownloadJob {
     this.store = store;
   }
 
+  public memoryChunks: Blob[] = [];
+  public isMemoryMode = false;
+  private quotaHandler?: () => Promise<boolean>;
+
+  public setQuotaHandler(handler: () => Promise<boolean>) {
+    this.quotaHandler = handler;
+  }
+
   public setCallbacks(
     onProgress: (p: DownloadProgress) => void,
-    onComplete: () => void,
+    onComplete: (result?: Blob) => void,
     onError: (e: Error) => void
   ) {
     this.onProgressCallback = onProgress;
@@ -46,7 +54,13 @@ export class DownloadJob {
     try {
       await this._execute();
       this.status = 'completed';
-      if (this.onCompleteCallback) this.onCompleteCallback();
+      if (this.onCompleteCallback) {
+        if (this.isMemoryMode) {
+          this.onCompleteCallback(new Blob(this.memoryChunks));
+        } else {
+          this.onCompleteCallback();
+        }
+      }
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') {
         this.status = 'paused';
@@ -155,11 +169,52 @@ export class DownloadJob {
     let pendingChunks: Uint8Array[] = [];
     let pendingSize = 0;
 
-    // Throttled flush
     const flush = async () => {
       if (pendingChunks.length === 0) return;
       const blob = new Blob(pendingChunks as unknown as BlobPart[]);
-      await this.store.appendChunk(this.id, blob, chunkIndex++, totalSize, etag);
+
+      if (this.isMemoryMode) {
+        this.memoryChunks.push(blob);
+        // We track progress locally. Metadata in store won't be updated, which is fine as we are in memory-only mode now.
+      } else {
+        try {
+          await this.store.appendChunk(this.id, blob, chunkIndex++, totalSize, etag);
+        } catch (e: any) {
+          if (e.name === 'QuotaExceededError' && this.quotaHandler) {
+            console.warn('[Job] Quota exceeded. Requesting fallback.');
+            const allowed = await this.quotaHandler();
+            if (allowed) {
+              this.isMemoryMode = true;
+              console.log('[Job] Switched to memory mode.');
+
+              // Recover existing chunks from store
+              try {
+                const existingStream = await this.store.getStream(this.id, chunkIndex); // chunks 0 to index-1
+                const reader = existingStream.getReader();
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  this.memoryChunks.push(new Blob([value as any]));
+                }
+                // Clear store to free space
+                await this.store.clear(this.id);
+
+                // Add current chunk
+                this.memoryChunks.push(blob);
+                chunkIndex++; // Increment for consistency?
+              } catch (recErr) {
+                console.error('[Job] Failed to recover chunks for memory mode', recErr);
+                throw e; // Fail if can't recover
+              }
+            } else {
+              throw e; // User denied
+            }
+          } else {
+            throw e;
+          }
+        }
+      }
+
       pendingChunks = [];
       pendingSize = 0;
     };

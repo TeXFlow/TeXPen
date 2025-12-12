@@ -21,20 +21,24 @@ export class DownloadScheduler {
     return DownloadScheduler.instance;
   }
 
-  public async download(url: string, onProgress?: (p: DownloadProgress) => void): Promise<void> {
+  private quotaHandler?: () => Promise<boolean>;
+
+  public setQuotaHandler(handler: () => Promise<boolean>) {
+    this.quotaHandler = handler;
+  }
+
+  public async download(url: string, onProgress?: (p: DownloadProgress) => void): Promise<Blob | void> {
     // 1. Deduplication
     if (this.jobs.has(url)) {
       const job = this.jobs.get(url)!;
-      // Attach secondary listener? 
-      // Simplified: Just wait for the promise wrapper.
-      // But we need to support multiple progress listeners?
-      // For now, simple Promise reuse. 
-      // If user provided a NEW progress callback, this architecture makes it hard to attach to running job easily.
-      // Let's assume the primary caller (ModelLoader) handles UI updates via single entry point per file.
       return this.waitForJob(job, onProgress);
     }
 
     const job = new DownloadJob(url, this.store);
+    if (this.quotaHandler) {
+      job.setQuotaHandler(this.quotaHandler);
+    }
+
     this.jobs.set(url, job);
     this.queue.push(job);
 
@@ -43,7 +47,7 @@ export class DownloadScheduler {
     return this.waitForJob(job, onProgress);
   }
 
-  private waitForJob(job: DownloadJob, onProgress?: (p: DownloadProgress) => void): Promise<void> {
+  private waitForJob(job: DownloadJob, onProgress?: (p: DownloadProgress) => void): Promise<Blob | void> {
     return new Promise((resolve, reject) => {
       // We override the callbacks here. 
       // WARNING: This replaces previous listeners if called multiple times!
@@ -58,11 +62,11 @@ export class DownloadScheduler {
         (p) => {
           if (onProgress) onProgress(p);
         },
-        () => {
+        (result) => {
           this.jobs.delete(job.id); // Cleanup
           this.activeCount--;
           this.processQueue();
-          resolve();
+          resolve(result);
         },
         (err) => {
           this.jobs.delete(job.id);

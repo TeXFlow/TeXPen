@@ -77,8 +77,8 @@ describe('Header', () => {
 
     it('renders correct active tab styling', () => {
         renderHeader({ activeTab: 'draw' });
-        const drawBtn = screen.getByText('Draw');
-        const uploadBtn = screen.getByText('Upload');
+        const drawBtn = screen.getByRole('button', { name: 'Draw' });
+        const uploadBtn = screen.getByRole('button', { name: 'Upload' });
 
         expect(drawBtn.className).toContain('text-cyan-600'); // active style updated
         expect(uploadBtn.className).toContain('text-slate-500'); // inactive style updated

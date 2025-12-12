@@ -13,6 +13,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [provider, setProvider] = useState<Provider>(MODEL_CONFIG.DEFAULT_PROVIDER as Provider);
     const [customModelId, setCustomModelId] = useState<string>(MODEL_CONFIG.ID);
     const [activeTab, setActiveTab] = useState<'draw' | 'upload'>('draw');
+    const [inferenceMode, setInferenceMode] = useState<'formula' | 'paragraph'>('formula');
 
     useEffect(() => {
         isWebGPUAvailable().then(available => {
@@ -87,7 +88,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const result = await modelInfer(canvas, {
                 onPreprocess: (debugImage) => {
                     setDrawState(prev => ({ ...prev, debugImage }));
-                }
+                },
+                mode: inferenceMode
             });
             if (result) {
                 updateDrawResult(result);
@@ -106,7 +108,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const result = await modelInferFromUrl(url, {
                 onPreprocess: (debugImage) => {
                     setUploadState(prev => ({ ...prev, debugImage }));
-                }
+                },
+                mode: inferenceMode
             });
             if (result) {
                 updateUploadResult(result);
@@ -208,6 +211,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         debugImage,
         numCandidates,
         setNumCandidates,
+        inferenceMode,
+        setInferenceMode,
         doSample,
         setDoSample,
         temperature,

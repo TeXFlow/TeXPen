@@ -185,7 +185,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = MODE
 
 
 
-  const infer = useCallback(async (canvas: HTMLCanvasElement, options?: { onPreprocess?: (debugImage: string) => void }) => {
+  const infer = useCallback(async (canvas: HTMLCanvasElement, options?: { onPreprocess?: (debugImage: string) => void; mode?: 'formula' | 'paragraph' }) => {
     // Prevent inference if model is loading or not confirmed
     if (status === 'loading') {
       console.log('Inference queued: Model is currently loading.');
@@ -230,6 +230,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = MODE
             top_k: topK,
             top_p: topP,
             onPreprocess: options?.onPreprocess,
+            mode: options?.mode,
           });
           if (res) {
             // Map string candidates to Candidate objects
@@ -264,7 +265,7 @@ export function useInkModel(theme: 'light' | 'dark', quantization: string = MODE
     });
   }, [numCandidates, doSample, temperature, topK, topP, status, userConfirmed, isLoadedFromCache]);
 
-  const inferFromUrl = useCallback(async (url: string, options?: { onPreprocess?: (debugImage: string) => void }) => {
+  const inferFromUrl = useCallback(async (url: string, options?: { onPreprocess?: (debugImage: string) => void; mode?: 'formula' | 'paragraph' }) => {
     // if (status === 'loading') {
     //   console.warn('Inference skipped: Model is currently loading.');
     //   return null;

@@ -13,4 +13,3 @@ Maintenance
 Performance
 
 Roadmap
-- [ ] TexTeller paragraph OCR

@@ -4,6 +4,11 @@ import { TeXPenLogo } from '../common/TeXPenLogo';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { Tooltip } from '../common/Tooltip';
 import { HelpIcon } from '../common/HelpIcon';
+import { PenIcon } from '../common/icons/PenIcon';
+import { HamburgerIcon } from '../common/icons/HamburgerIcon';
+import { DrawIcon } from '../common/icons/DrawIcon';
+import { UploadIcon } from '../common/icons/UploadIcon';
+import { IconButton } from '../common/IconButton';
 
 const Header: React.FC = () => {
     const {
@@ -12,7 +17,6 @@ const Header: React.FC = () => {
         activeTab,
         setActiveTab,
         toggleSidebar,
-        isSidebarOpen,
     } = useAppContext();
 
     return (
@@ -21,64 +25,38 @@ const Header: React.FC = () => {
             {/* Left: Logo & Sidebar Toggle */}
             <div className="flex items-center gap-2 md:gap-3 group">
                 {/* Mobile Sidebar Toggle */}
-                <button
-                    onClick={toggleSidebar}
-                    className="md:hidden p-2 -ml-2 text-slate-500 dark:text-white/40 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
-                >
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
+                <div className="-ml-2 md:hidden">
+                    <IconButton
+                        onClick={toggleSidebar}
+                        variant="ghost"
+                        icon={<HamburgerIcon />}
+                    />
+                </div>
 
                 {/* Minimalist Nib Icon */}
                 <div className="relative flex items-center justify-center">
                     <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <svg className="w-8 h-8 text-cyan-500 dark:text-cyan-400 overflow-visible" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        {/* Rotating Pen Group */}
-                        <g className="origin-center transform transition-transform duration-500 group-hover:-rotate-45">
-                            <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                            <path d="M2 2l7.586 7.586" />
-                            <circle cx="11" cy="11" r="2" />
-                        </g>
-                        {/* Stationary Ink Trace (Arc of the tip movement) */}
-                        {/* Tip moves from (2,2) -> (-2.14, 12) when rotated -45deg around (12,12) */}
-                        <path
-                            d="M 2 2 A 14.14 14.14 0 0 0 -2.14 12"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                            strokeWidth="2"
-                        />
-                    </svg>
+                    <PenIcon />
                 </div>
                 <TeXPenLogo className="h-8 w-auto" />
             </div>
 
             {/* Center: Mode Switcher (Desktop Only) */}
             <div className="hidden md:flex md:absolute md:left-1/2 md:-translate-x-1/2 items-center bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5">
-                <button
+                <IconButton
+                    label="Draw"
                     onClick={() => setActiveTab('draw')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 flex items-center gap-2 ${activeTab === 'draw'
-                        ? 'bg-white dark:bg-[#222] text-cyan-600 dark:text-cyan-400 shadow-sm'
-                        : 'text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white'
-                        }`}
-                >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                    Draw
-                </button>
-                <button
+                    isActive={activeTab === 'draw'}
+                    icon={<DrawIcon />}
+                    variant="pill"
+                />
+                <IconButton
+                    label="Upload"
                     onClick={() => setActiveTab('upload')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 flex items-center gap-2 ${activeTab === 'upload'
-                        ? 'bg-white dark:bg-[#222] text-cyan-600 dark:text-cyan-400 shadow-sm'
-                        : 'text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white'
-                        }`}
-                >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Upload
-                </button>
+                    isActive={activeTab === 'upload'}
+                    icon={<UploadIcon />}
+                    variant="pill"
+                />
             </div>
 
             {/* Right: Controls */}

@@ -41,7 +41,8 @@ const Main: React.FC = () => {
         closeDialog
     } = useAppContext();
 
-    const { theme } = useThemeContext();
+    // Theme not currently used in Main directly, passed down to components or used in CSS
+    // const { theme } = useThemeContext();
     const { history, addToHistory, deleteHistoryItem, clearHistory } = useHistoryContext();
 
     const uploadFileInputRef = useRef<HTMLInputElement>(null);

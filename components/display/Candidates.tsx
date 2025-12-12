@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
+import { useHistoryContext } from '../../contexts/HistoryContext';
 
 
 // Component to render a single candidate with MathJax
@@ -104,7 +105,25 @@ const Candidates: React.FC = () => {
         candidates,
         selectedIndex,
         selectCandidate,
+        sessionId,
+        activeTab,
     } = useAppContext();
+    const { addToHistory } = useHistoryContext();
+
+    const handleCandidateClick = (index: number) => {
+        // Only save to history if selecting a different candidate
+        if (index !== selectedIndex && candidates[index]) {
+            const candidate = candidates[index];
+            addToHistory({
+                id: Date.now().toString(),
+                latex: candidate.latex,
+                timestamp: Date.now(),
+                source: activeTab,
+                sessionId,
+            });
+        }
+        selectCandidate(index);
+    };
 
     return (
         <div className="flex-none h-20 flex items-center relative z-20 transition-colors duration-500">
@@ -114,7 +133,7 @@ const Candidates: React.FC = () => {
                 {candidates.map((cand, idx) => (
                     <button
                         key={`${idx}-${cand.latex}`}
-                        onClick={() => selectCandidate(idx)}
+                        onClick={() => handleCandidateClick(idx)}
                         className={`
                 relative group flex-none h-12 px-4 rounded-xl text-lg transition-all duration-300 flex items-center justify-center overflow-hidden max-w-[240px] min-w-[64px]
                 ${selectedIndex === idx

@@ -167,11 +167,10 @@ export class ModelLoader {
       const fileUrl = `https://huggingface.co/${modelId}/resolve/main/${file}`;
       try {
         const result = await downloadManager.checkCacheIntegrity(fileUrl);
-        if (!result.ok && !result.missing) {
-          console.warn(`[ModelLoader] File corrupted: ${file} - ${result.reason}`);
+        if (!result.ok) {
+          // Both missing and corrupted files need to be re-downloaded
+          console.warn(`[ModelLoader] File ${result.missing ? 'missing' : 'corrupted'}: ${file}${result.reason ? ` - ${result.reason}` : ''}`);
           corruptedUrls.push(fileUrl);
-        } else if (result.missing) {
-          console.log(`[ModelLoader] File missing (will be downloaded): ${file}`);
         }
       } catch (e) {
         console.error(`[ModelLoader] Failed to check integrity for ${file}:`, e);
@@ -183,3 +182,4 @@ export class ModelLoader {
 }
 
 export const modelLoader = ModelLoader.getInstance();
+

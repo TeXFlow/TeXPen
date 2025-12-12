@@ -30,9 +30,9 @@ export const useVerifyDownloads = () => {
         if (corrupted.length > 0) {
           toast(null);
           openDialog({
-            title: 'Corrupted Files Found',
-            message: `Found ${corrupted.length} corrupted files. Fix them now?`,
-            confirmText: 'Repair',
+            title: 'Missing or Corrupted Files',
+            message: `Found ${corrupted.length} file(s) that need to be downloaded. Fix them now?`,
+            confirmText: 'Download',
             isDangerous: false,
             onConfirm: async () => {
               closeDialog();

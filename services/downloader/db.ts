@@ -13,21 +13,52 @@ interface DownloadDB extends DBSchema {
   };
 }
 
-let dbPromise: Promise<IDBPDatabase<DownloadDB>>;
+let dbPromise: Promise<IDBPDatabase<DownloadDB> | null> | null = null;
+let dbUnavailableLogged = false;
 
-export function getDB() {
-  if (!dbPromise) {
-    dbPromise = openDB<DownloadDB>('texpen-downloads', 1, {
-      upgrade(db) {
-        db.createObjectStore('downloads', { keyPath: 'url' });
-      },
-    });
+/**
+ * Gets the IndexedDB database instance.
+ * Returns null if IndexedDB is unavailable (e.g., mobile Safari private mode, iOS 14 and below in some cases).
+ */
+export async function getDB(): Promise<IDBPDatabase<DownloadDB> | null> {
+  if (dbPromise === null) {
+    dbPromise = (async () => {
+      try {
+        // Check if IndexedDB is available at all
+        if (typeof indexedDB === 'undefined') {
+          if (!dbUnavailableLogged) {
+            console.warn('[db] IndexedDB is not available in this browser.');
+            dbUnavailableLogged = true;
+          }
+          return null;
+        }
+
+        const db = await openDB<DownloadDB>('texpen-downloads', 1, {
+          upgrade(db) {
+            db.createObjectStore('downloads', { keyPath: 'url' });
+          },
+        });
+        return db;
+      } catch (error) {
+        // IndexedDB can throw in private browsing mode on some mobile browsers
+        if (!dbUnavailableLogged) {
+          console.warn('[db] Failed to open IndexedDB (likely private browsing mode):', error);
+          dbUnavailableLogged = true;
+        }
+        return null;
+      }
+    })();
   }
   return dbPromise;
 }
 
 export async function saveChunk(url: string, chunk: Blob, totalBytes: number, _chunkIndex: number, etag: string | null) {
   const db = await getDB();
+  if (!db) {
+    // IndexedDB is unavailable - throw to trigger memory-only fallback in DownloadManager
+    throw new Error('IndexedDB is unavailable');
+  }
+
   const tx = db.transaction('downloads', 'readwrite');
   const store = tx.objectStore('downloads');
 
@@ -66,10 +97,19 @@ export async function saveChunk(url: string, chunk: Blob, totalBytes: number, _c
 
 export async function getPartialDownload(url: string) {
   const db = await getDB();
+  if (!db) {
+    // IndexedDB unavailable - no partial download possible
+    return null;
+  }
   return db.get('downloads', url);
 }
 
 export async function clearPartialDownload(url: string) {
   const db = await getDB();
+  if (!db) {
+    // IndexedDB unavailable - nothing to clear
+    return;
+  }
   return db.delete('downloads', url);
 }
+

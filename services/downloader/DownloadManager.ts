@@ -130,6 +130,10 @@ export class DownloadManager {
         if (index < totalChunks) {
           try {
             const db = await getDB();
+            if (!db) {
+              controller.error(new Error('IndexedDB became unavailable during stream read'));
+              return;
+            }
             const entry = await db.get('downloads', url);
 
             // Safety check: entry might have been deleted or corrupted

@@ -1,19 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { DownloadManager } from '../../../services/downloader/DownloadManager';
-import * as db from '../../../services/downloader/db';
+import { downloadScheduler } from '../../../services/downloader/v2/DownloadScheduler';
+import { ChunkStore } from '../../../services/downloader/v2/ChunkStore';
 
-// Mock dependencies
-vi.mock('../../../services/downloader/db', () => ({
-  getDB: vi.fn().mockResolvedValue({
-    transaction: vi.fn(),
-    get: vi.fn(),
-  }),
-  getPartialDownload: vi.fn(),
-  saveChunk: vi.fn(),
-  clearPartialDownload: vi.fn(),
-  getChunk: vi.fn(),
-}));
+// Mock ChunkStore
+vi.mock('../../../services/downloader/v2/ChunkStore', () => {
+  const ChunkStore = vi.fn();
+  ChunkStore.prototype.getMetadata = vi.fn();
+  ChunkStore.prototype.appendChunk = vi.fn();
+  ChunkStore.prototype.clear = vi.fn();
+  ChunkStore.prototype.getStream = vi.fn().mockResolvedValue(new ReadableStream({
+    start(controller) { controller.close(); }
+  }));
+  return { ChunkStore };
+});
 
 // Mock globals
 global.fetch = vi.fn();
@@ -25,10 +26,25 @@ global.caches = {
   }),
 } as any;
 
-describe('DownloadManager Resume', () => {
+describe('DownloadManager Resume (V2)', () => {
   let downloadManager: DownloadManager;
+  let mockStore: any;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Reset Scheduler instance hack
+    (downloadScheduler as any).jobs = new Map();
+    (downloadScheduler as any).queue = [];
+    (downloadScheduler as any).activeCount = 0;
+
+    // Get the mocked store instance from the scheduler
+    // Since Scheduler creates new ChunkStore(), and we mocked the class, we need to grab the instance.
+    // Ideally we can just inject it? No, it's private.
+    // But since we mocked the module, the instance inside scheduler IS our mock.
+    mockStore = (downloadScheduler as any).store;
+
+    // Re-instantiate Manager
     (DownloadManager as any).instance = new (DownloadManager as any)();
     downloadManager = DownloadManager.getInstance();
   });
@@ -37,21 +53,35 @@ describe('DownloadManager Resume', () => {
     vi.clearAllMocks();
   });
 
-  it('should resume download using chunkSizes from metadata', async () => {
-    // Mock partial download with chunkSizes
-    (db.getPartialDownload as Mock).mockResolvedValue({
-      url: 'http://example.com/resume.onnx',
-      chunkCount: 2,
-      chunkSizes: [100, 100], // 200 bytes total
-      totalBytes: 500,
-    });
+  it('should resume download using downloadedBytes from metadata', async () => {
+    // Mock initial state for DownloadJob check
+    mockStore.getMetadata
+      .mockResolvedValueOnce({
+        url: 'http://example.com/resume.onnx',
+        chunkCount: 2,
+        downloadedBytes: 200,
+        totalBytes: 500,
+        etag: 'test-etag'
+      })
+      // Mock final state for finalizeCache check
+      .mockResolvedValueOnce({
+        url: 'http://example.com/resume.onnx',
+        chunkCount: 3, // +1 chunk
+        downloadedBytes: 500, // Completed
+        totalBytes: 500,
+        etag: 'test-etag'
+      });
 
     // Mock fetch to return remaining bytes (300 bytes)
     const remainingSize = 300;
     (global.fetch as Mock).mockResolvedValue({
       ok: true,
       headers: {
-        get: (key: string) => key === 'Content-Length' ? remainingSize.toString() : null
+        get: (key: string) => {
+          if (key === 'Content-Length') return remainingSize.toString();
+          if (key === 'Etag') return 'test-etag';
+          return null;
+        }
       },
       status: 206,
       body: {
@@ -76,25 +106,30 @@ describe('DownloadManager Resume', () => {
     const fetchCall = (global.fetch as Mock).mock.calls[0];
     const headers = fetchCall[1].headers;
     expect(headers['Range']).toBe('bytes=200-');
-
-    // Should NOT call getChunk (the old slow way) - BUT ReadableStream might eager pull for assembly.
-    // The Range header check is sufficient to prove we resumed from 200 bytes.
-    // expect(db.getChunk).not.toHaveBeenCalled();
   });
 
-  it('should restart download if chunkSizes are missing in metadata', async () => {
-    // Legacy metadata without chunkSizes
-    (db.getPartialDownload as Mock).mockResolvedValue({
-      url: 'http://example.com/legacy.onnx',
-      chunkCount: 2,
-      // chunkSizes missing
-      totalBytes: 500,
-    });
+  it('should restart download if downloadedBytes is missing or 0', async () => {
+    // Legacy metadata or empty start
+    mockStore.getMetadata
+      .mockResolvedValueOnce({
+        url: 'http://example.com/restart.onnx',
+        chunkCount: 2,
+        downloadedBytes: 0,
+        totalBytes: 500,
+      })
+      .mockResolvedValueOnce({
+        url: 'http://example.com/restart.onnx',
+        chunkCount: 1,
+        downloadedBytes: 500,
+        totalBytes: 500,
+      });
 
     // Full download (500 bytes)
     (global.fetch as Mock).mockResolvedValue({
       ok: true,
-      headers: { get: () => '500' },
+      headers: {
+        get: (key: string) => key === 'Content-Length' ? '500' : null
+      },
       status: 200, // Full download
       body: {
         getReader: () => {
@@ -112,15 +147,14 @@ describe('DownloadManager Resume', () => {
       }
     } as any);
 
-    await downloadManager.downloadFile('http://example.com/legacy.onnx');
+    await downloadManager.downloadFile('http://example.com/restart.onnx');
 
-    // Verify fetched from 0 (no Range header or Range=bytes=0-)
+    // Verify fetched from 0 (Range header depends on startByte > 0)
     const fetchCall = (global.fetch as Mock).mock.calls[0];
     const headers = fetchCall[1].headers;
-    // DownloadManager logic: if startByte > 0, adds range. If startByte is 0, no range.
     expect(headers['Range']).toBeUndefined();
 
-    // Verify clearPartialDownload was called
-    expect(db.clearPartialDownload).toHaveBeenCalledWith('http://example.com/legacy.onnx');
+    // Verify cleanup was called
+    expect(mockStore.clear).toHaveBeenCalledWith('http://example.com/restart.onnx');
   });
 });

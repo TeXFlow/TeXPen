@@ -156,7 +156,7 @@ const Main: React.FC = () => {
     // Shared loading overlay for both tabs
     const renderLoadingOverlay = () => {
         if (customNotification) {
-            return <ProgressToast phase={customNotification} progress={0} isQueued={false} />;
+            return <ProgressToast phase={customNotification.message} progress={customNotification.progress ?? 0} isQueued={false} />;
         }
         return <ProgressToast phase={loadingPhase} progress={progress} isQueued={isGenerationQueued} />;
     };

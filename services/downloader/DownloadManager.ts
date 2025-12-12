@@ -15,7 +15,7 @@ export class DownloadManager {
   }
 
   // Legacy method signature compatibility
-  public setQuotaErrorHandler(handler: () => Promise<boolean>) {
+  public setQuotaErrorHandler(_handler: () => Promise<boolean>) {
     // V2 doesn't use this yet
     console.warn('Quota error handler not yet implemented in V2');
   }

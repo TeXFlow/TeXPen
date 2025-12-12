@@ -84,8 +84,8 @@ export interface AppContextType {
     activeInferenceTab?: 'draw' | 'upload' | null;
 
     // Custom Notification
-    customNotification: string | null;
-    setCustomNotification: (msg: string | null) => void;
+    customNotification: { message: string; progress?: number } | null;
+    setCustomNotification: (notification: { message: string; progress?: number } | null) => void;
 
     // Global Confirmation Dialog
     dialogConfig: {

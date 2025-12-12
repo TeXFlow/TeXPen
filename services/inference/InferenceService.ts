@@ -263,6 +263,10 @@ export class InferenceService {
       debugImage = dbgImg;
       timings.preprocess = performance.now() - startPreprocess;
 
+      if (req.options.onPreprocess) {
+        req.options.onPreprocess(debugImage);
+      }
+
       if (signal.aborted) throw new Error("Aborted");
 
       // 2) Generation config (max tokens, repetition penalty, etc.)

@@ -18,8 +18,8 @@ export interface AppContextType {
     setLatex: (latex: string) => void;
     candidates: Candidate[];
     loadedStrokes?: Stroke[] | null;
-    infer: (canvas: HTMLCanvasElement) => Promise<{ latex: string; candidates: Candidate[] } | null>;
-    inferFromUrl: (url: string) => Promise<{ latex: string; candidates: Candidate[] } | null>;
+    infer: (canvas: HTMLCanvasElement, options?: { onPreprocess?: (debugImage: string) => void }) => Promise<{ latex: string; candidates: Candidate[] } | null>;
+    inferFromUrl: (url: string, options?: { onPreprocess?: (debugImage: string) => void }) => Promise<{ latex: string; candidates: Candidate[] } | null>;
     clearModel: () => void;
     loadingPhase: string;
     isInferencing: boolean;
@@ -172,6 +172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUploadResult,
         loadDrawState,
         setDrawState,
+        setUploadState,
         activeInferenceTab,
         startDrawInference,
         endDrawInference,
@@ -188,7 +189,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         startDrawInference();
 
         try {
-            const result = await modelInfer(canvas);
+            const result = await modelInfer(canvas, {
+                onPreprocess: (debugImage) => {
+                    setDrawState(prev => ({ ...prev, debugImage }));
+                }
+            });
             if (result) {
                 updateDrawResult(result);
                 return result;
@@ -203,7 +208,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         startUploadInference();
 
         try {
-            const result = await modelInferFromUrl(url);
+            const result = await modelInferFromUrl(url, {
+                onPreprocess: (debugImage) => {
+                    setUploadState(prev => ({ ...prev, debugImage }));
+                }
+            });
             if (result) {
                 updateUploadResult(result);
                 return result;

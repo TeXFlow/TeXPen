@@ -29,6 +29,7 @@ export interface SamplingOptions {
   top_k?: number;
   top_p?: number;
   num_beams?: number; // legacy numCandidates mapping
+  onPreprocess?: (debugImage: string) => void;
 }
 
 export interface InferenceOptions {

@@ -356,11 +356,7 @@ export class DownloadManager {
 
   /**
    * Checks if a file exists in the cache and if its size matches the Content-Length header.
-   * Returns { ok: true } if valid or missing (cannot verify missing),
-   * or { ok: false, reason: string } if corrupted.
-   * Note: Missing files are considered "not corrupted" by this check itself,
-   * but the caller should verify existence if needed.
-   * Actually, let's return a specific status.
+   * Also performs a SHA-256 checksum calculation to ensure the file is readable and consistent.
    */
   public async checkCacheIntegrity(url: string): Promise<{ ok: boolean, reason?: string, missing?: boolean }> {
     // @ts-expect-error - env.cacheName exists in runtime but is missing from type definitions
@@ -388,7 +384,25 @@ export class DownloadManager {
       };
     }
 
+    // Perform a full read and checksum to ensure file integrity
+    try {
+      await this.computeChecksum(actualBlob);
+    } catch (e) {
+      return {
+        ok: false,
+        reason: `Checksum calculation failed (unreadable file): ${e}`
+      };
+    }
+
     return { ok: true };
+  }
+
+  private async computeChecksum(blob: Blob): Promise<string> {
+    const arrayBuffer = await blob.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
   }
 
   public async deleteFromCache(url: string): Promise<void> {
@@ -403,3 +417,4 @@ export class DownloadManager {
 }
 
 export const downloadManager = DownloadManager.getInstance();
+

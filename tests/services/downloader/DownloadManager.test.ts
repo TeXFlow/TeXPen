@@ -97,6 +97,16 @@ describe('DownloadManager', () => {
     // Mock global fetch
     global.fetch = vi.fn();
 
+    // Mock global crypto
+    Object.defineProperty(global, 'crypto', {
+      value: {
+        subtle: {
+          digest: vi.fn().mockResolvedValue(new ArrayBuffer(32))
+        }
+      },
+      writable: true
+    });
+
     // Mock caches
     mockCachePut = vi.fn().mockResolvedValue(undefined);
     mockCacheMatch = vi.fn().mockResolvedValue(null);
@@ -538,13 +548,26 @@ describe('DownloadManager', () => {
   describe('checkCacheIntegrity', () => {
     it('should return ok for valid file', async () => {
       const mockUrl = 'https://example.com/valid.file';
-      const mockBlob = { size: 100 };
+      const mockBlob = {
+        size: 100,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(100))
+      };
       const mockResponse = {
         headers: { get: vi.fn().mockReturnValue('100') },
         clone: vi.fn().mockReturnThis(),
         blob: vi.fn().mockResolvedValue(mockBlob)
       };
       mockCacheMatch.mockResolvedValue(mockResponse);
+
+      // Mock crypto
+      Object.assign(global, {
+        crypto: {
+          subtle: {
+            digest: vi.fn().mockResolvedValue(new ArrayBuffer(32))
+          }
+        }
+      });
+
 
       const result = await downloadManager.checkCacheIntegrity(mockUrl);
       expect(result).toEqual({ ok: true });
@@ -589,5 +612,33 @@ describe('DownloadManager', () => {
       expect(result.ok).toBe(false);
       expect(result.reason).toContain('empty');
     });
+
+    it('should return corrupt if checksum calculation fails (read error)', async () => {
+      const mockUrl = 'https://example.com/unreadable.file';
+      const mockBlob = {
+        size: 100,
+        arrayBuffer: vi.fn().mockRejectedValue(new Error('Read error'))
+      };
+      const mockResponse = {
+        headers: { get: vi.fn().mockReturnValue('100') },
+        clone: vi.fn().mockReturnThis(),
+        blob: vi.fn().mockResolvedValue(mockBlob)
+      };
+      mockCacheMatch.mockResolvedValue(mockResponse);
+
+      // Mock crypto
+      Object.assign(global, {
+        crypto: {
+          subtle: {
+            digest: vi.fn().mockResolvedValue(new ArrayBuffer(32))
+          }
+        }
+      });
+
+      const result = await downloadManager.checkCacheIntegrity(mockUrl);
+      expect(result.ok).toBe(false);
+      expect(result.reason).toContain('Checksum calculation failed');
+    });
   });
 });
+

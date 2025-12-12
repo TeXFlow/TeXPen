@@ -5,7 +5,11 @@ import * as db from '../../../services/downloader/db';
 
 // Mock dependencies
 vi.mock('../../../services/downloader/db', () => ({
-  getDB: vi.fn(),
+  getDB: vi.fn().mockResolvedValue({
+    // Mock db object - returns truthy to indicate IDB is available
+    transaction: vi.fn(),
+    get: vi.fn(),
+  }),
   getPartialDownload: vi.fn().mockResolvedValue(null),
   saveChunk: vi.fn(),
   clearPartialDownload: vi.fn(),

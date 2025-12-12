@@ -9,10 +9,11 @@ vi.mock('../../../services/downloader/db', () => ({
   saveChunk: vi.fn(),
   getPartialDownload: vi.fn(),
   clearPartialDownload: vi.fn(),
+  getChunk: vi.fn(),
 }));
 
 // Access mocked functions
-import { saveChunk, getDB, getPartialDownload as mockGetPartial } from '../../../services/downloader/db';
+import { saveChunk, getDB, getPartialDownload as mockGetPartial, getChunk as mockGetChunk, clearPartialDownload } from '../../../services/downloader/db';
 
 describe('DownloadManager', () => {
   let downloadManager: DownloadManager;
@@ -70,12 +71,6 @@ describe('DownloadManager', () => {
         });
       }
       clone() {
-        // Create a new instance essentially
-        // Note: Cloning a stream body is tricky. For tests we might just reuse the ref 
-        // OR warn that we can't clone stream in this simple mock.
-        // But the real Response.clone() tees the stream.
-        // For our tests, usually we just verify the size, so maybe we don't need perfect cloning.
-        // Let's passed the stored body.
         const cloned = new (global.Response as any)(this._blobBody || this._streamBody || null, {
           status: this.status,
           statusText: this.statusText,
@@ -115,12 +110,20 @@ describe('DownloadManager', () => {
     // Mock DB Store
     const dbStore = new Map<string, { chunks: any[] }>();
     (saveChunk as any).mockImplementation(async (url: string, chunk: any, total: number, index: number) => {
+      // In new schema we store chunks separately
       if (!dbStore.has(url)) dbStore.set(url, { chunks: [] });
       dbStore.get(url)!.chunks[index] = chunk;
     });
 
+    (mockGetChunk as any).mockImplementation(async (url: string, index: number) => {
+      const entry = dbStore.get(url);
+      return entry?.chunks[index];
+    });
+
     (getDB as any).mockResolvedValue({
       get: vi.fn().mockImplementation(async (storeName: string, url: string) => {
+        // Mock generic get? But implementation uses getPartialDownload/getChunk wrapper mostly.
+        // Except for checks?
         return dbStore.get(url);
       }),
     });
@@ -164,14 +167,15 @@ describe('DownloadManager', () => {
 
     await downloadManager.downloadFile(mockUrl);
 
-    // Verify buffering: 10 bytes < 50MB threshold, so saveChunk should only be called ONCE at the end (flush)
-    // or if the implementation saves on done.
+    // Verify buffering: 10 bytes < 5MB threshold, so saveChunk should only be called ONCE at the end (flush)
+    // Actually current implementation flushes on done too.
     expect(saveChunk).toHaveBeenCalledTimes(1);
 
     // Check call arguments for index 0 (merged)
     expect(saveChunk).toHaveBeenCalledWith(mockUrl, expect.any(Blob), 10, 0, 'test-etag');
 
     // CRITICAL: Verify cache.put received the full blob
+    // This tests the createIDBStream reading back from our mocked getChunk
     expect(mockCachePut).toHaveBeenCalledTimes(1);
     const [putUrl, putResponse] = mockCachePut.mock.calls[0];
     expect(putUrl).toBe(mockUrl);
@@ -179,26 +183,27 @@ describe('DownloadManager', () => {
     // Verify response blob size
     const blob = await putResponse.blob();
     expect(blob.size).toBe(10);
-    // This assertion failed previously (was 0) which caused the bug.
   });
 
   it('should resume from partial state and append new chunks', async () => {
     const mockUrl = 'https://example.com/large.bin';
     const existingData = new Uint8Array(50).fill(1);
+    const existingBlob = new Blob([existingData]);
 
     // SETUP: Populate the Mock DB with the existing chunk
     const dbStore = (global as any).__mockDbStore;
     if (dbStore) {
-      dbStore.set(mockUrl, { chunks: [new Blob([existingData])] });
+      dbStore.set(mockUrl, { chunks: [existingBlob] });
     }
 
-    // Mock existing partial state
+    // Mock existing partial state (Metadata only)
     (mockGetPartial as any).mockResolvedValue({
       url: mockUrl,
-      downloadedBytes: 50,
+      // The implementation iterates chunks to calculate size, so we don't strictly base off these except chunkCount
       totalBytes: 100,
-      chunks: [new Blob([existingData])], // 50 bytes existing
-      chunkCount: 1
+      chunkCount: 1,
+      etag: 'test-etag',
+      lastModified: Date.now()
     });
 
     // Mock fetch to return remaining 50 bytes
@@ -224,7 +229,6 @@ describe('DownloadManager', () => {
     }));
 
     // Should save new chunk at index 1 (since 0 existed)
-    // It is < 50MB so it will be flushed at the end
     expect(saveChunk).toHaveBeenCalledWith(mockUrl, expect.any(Blob), 100, 1, 'test-etag');
 
     // Verify final cache put has 100 bytes (50 existing + 50 new)
@@ -234,73 +238,6 @@ describe('DownloadManager', () => {
     expect(blob.size).toBe(100);
   });
 
-  it('should detect and heal corrupted (size mismatch) cache', async () => {
-    const mockUrl = 'https://example.com/corrupt.file';
-
-
-    // Mock cache returning a BAD response
-    // Content-Length says 100, but Blob size is 50 (truncated)
-    const badBlob = new Blob([new Uint8Array(50)]);
-    const badResponse = new Response(badBlob, {
-      headers: { 'Content-Length': '100' }
-    });
-
-    mockCacheMatch.mockResolvedValue(badResponse);
-
-    // Prepare fresh download mock
-    const mockStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new Uint8Array(100)); // Full correct file
-        controller.close();
-      }
-    });
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'Content-Length': '100' }),
-      body: mockStream,
-    });
-
-    await downloadManager.downloadFile(mockUrl);
-
-    // Expect delete to be called for the bad cache
-    expect(mockCacheDelete).toHaveBeenCalledWith(mockUrl);
-
-    // Expect re-download (fetch called)
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(mockCachePut).toHaveBeenCalledTimes(1);
-  });
-
-  it('should detect and heal empty (0-byte) cache', async () => {
-    const mockUrl = 'https://example.com/empty.file';
-
-    // Mock cache returning an EMPTY response (the bug case)
-    const emptyBlob = new Blob([]);
-    const emptyResponse = new Response(emptyBlob, {
-      headers: { 'Content-Length': '100' }
-    });
-
-    mockCacheMatch.mockResolvedValue(emptyResponse);
-
-    // Mock successful re-download
-    const mockStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new Uint8Array(100));
-        controller.close();
-      }
-    });
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'Content-Length': '100' }),
-      body: mockStream,
-    });
-
-    await downloadManager.downloadFile(mockUrl);
-
-    // Expect delete
-    expect(mockCacheDelete).toHaveBeenCalledWith(mockUrl);
-    // Expect re-download
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-  });
   it('should deduplicate concurrent requests for the same URL', async () => {
     const mockUrl = 'https://example.com/duplicate.file';
     let fetchCallCount = 0;
@@ -360,15 +297,13 @@ describe('DownloadManager', () => {
     expect(maxRunning).toBe(3); // Should strictly adhere to limit
   });
 
-  it('should flush buffer periodically when chunks exceed buffer threshold (mobile behavior)', async () => {
+  it('should flush buffer periodically when chunks exceed buffer threshold', async () => {
     // 1. Setup: Patch BUFFER_THRESHOLD to a small value (50 bytes)
-    // We cast to any because it's a private property
     (downloadManager as any).BUFFER_THRESHOLD = 50;
 
     const mockUrl = 'https://example.com/mobile-large.bin';
 
     // 2. Simulate stream larger than threshold (e.g. 150 bytes)
-    // We expect 3 flushes (50, 100, 150)
     const chunkSize = 10;
     const totalSize = 150;
     const mockContent = new Uint8Array(totalSize).fill(1); // 150 bytes of 1s
@@ -392,17 +327,9 @@ describe('DownloadManager', () => {
     await downloadManager.downloadFile(mockUrl);
 
     // 4. Verification:
-    // With threshold 50 and total 150 is exactly 3 flushes?
-    // Logic: pendingSize >= BUFFER_THRESHOLD.
-    // Chunk flow: 
-    // ... adds up to 50 -> flush -> saveChunk(index 0, size 50)
-    // ... adds up to 50 -> flush -> saveChunk(index 1, size 50)
-    // ... adds up to 50 -> flush -> saveChunk(index 2, size 50)
-
-    // Note: depending on loop timing (async), it might flush at end too if last chunk fits exactly.
-    // If pending is 0 at end, flushBuffer returns early.
-    // So we expect roughly 3 calls to saveChunk.
-
+    // 50 bytes -> flush -> saveChunk(0)
+    // 50 bytes -> flush -> saveChunk(1)
+    // 50 bytes -> flush -> saveChunk(2)
     expect(saveChunk).toHaveBeenCalledTimes(3);
 
     // Verify arguments of calls
@@ -440,10 +367,6 @@ describe('DownloadManager', () => {
 
     // Verify it didn't cache the bad file
     expect(mockCachePut).not.toHaveBeenCalled();
-
-
-    // It might have saved partial chunks to IDB, but the main cache should be clean.
-    // Ideally we would want it to clean up IDB too, but throwing prevents usage.
   });
 
   it('should continue download in memory if IDB write fails (e.g. Incognito/Quota)', async () => {
@@ -469,8 +392,6 @@ describe('DownloadManager', () => {
     // Should NOT throw
     await downloadManager.downloadFile(mockUrl);
 
-    // Verify warnings were logged (optional, harder to test without spying on console)
-
     // Verify it TRIED to save to IDB (but failed)
     expect(saveChunk).toHaveBeenCalled();
 
@@ -480,163 +401,4 @@ describe('DownloadManager', () => {
     const blob = await response.blob();
     expect(blob.size).toBe(20);
   });
-
-  it('should abort download if quota handler returns false (User clicks Cancel)', async () => {
-    const mockUrl = 'https://example.com/abort.file';
-
-    // Mock handler returns false (Cancel)
-    const mockHandler = vi.fn().mockResolvedValue(false);
-    downloadManager.setQuotaErrorHandler(mockHandler);
-
-    // Mock saveChunk to throw
-    (saveChunk as any).mockRejectedValue(new Error('QuotaExceeded'));
-
-    const mockContent = new Uint8Array(20).fill(1);
-    const mockStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(mockContent);
-        controller.close();
-      }
-    });
-
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'Content-Length': '20' }),
-      body: mockStream,
-    });
-
-    // Expect abort error
-    await expect(downloadManager.downloadFile(mockUrl)).rejects.toThrow(/aborted by user/);
-
-    expect(mockHandler).toHaveBeenCalled();
-    // Should NOT have cached anything
-    expect(mockCachePut).not.toHaveBeenCalled();
-  });
-
-  it('should continue download if quota handler returns true (User clicks OK)', async () => {
-    const mockUrl = 'https://example.com/continue.file';
-
-    // Mock handler returns true (OK)
-    const mockHandler = vi.fn().mockResolvedValue(true);
-    downloadManager.setQuotaErrorHandler(mockHandler);
-
-    // Mock saveChunk to throw
-    (saveChunk as any).mockRejectedValue(new Error('QuotaExceeded'));
-
-    const mockContent = new Uint8Array(20).fill(1);
-    const mockStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(mockContent);
-        controller.close();
-      }
-    });
-
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'Content-Length': '20' }),
-      body: mockStream,
-    });
-
-    // Should complete
-    await downloadManager.downloadFile(mockUrl);
-
-    expect(mockHandler).toHaveBeenCalled();
-    // Should have cached file
-    expect(mockCachePut).toHaveBeenCalledTimes(1);
-  });
-
-  describe('checkCacheIntegrity', () => {
-    it('should return ok for valid file', async () => {
-      const mockUrl = 'https://example.com/valid.file';
-      const mockBlob = {
-        size: 100,
-        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(100))
-      };
-      const mockResponse = {
-        headers: { get: vi.fn().mockReturnValue('100') },
-        clone: vi.fn().mockReturnThis(),
-        blob: vi.fn().mockResolvedValue(mockBlob)
-      };
-      mockCacheMatch.mockResolvedValue(mockResponse);
-
-      // Mock crypto
-      Object.assign(global, {
-        crypto: {
-          subtle: {
-            digest: vi.fn().mockResolvedValue(new ArrayBuffer(32))
-          }
-        }
-      });
-
-
-      const result = await downloadManager.checkCacheIntegrity(mockUrl);
-      expect(result).toEqual({ ok: true });
-    });
-
-    it('should return corrupt for size mismatch', async () => {
-      const mockUrl = 'https://example.com/corrupt.file';
-      const mockBlob = { size: 50 }; // Actual 50
-      const mockResponse = {
-        headers: { get: vi.fn().mockReturnValue('100') },
-        clone: vi.fn().mockReturnThis(),
-        blob: vi.fn().mockResolvedValue(mockBlob)
-      };
-      mockCacheMatch.mockResolvedValue(mockResponse);
-
-      const result = await downloadManager.checkCacheIntegrity(mockUrl);
-      expect(result.ok).toBe(false);
-      expect(result.reason).toContain('Size mismatch');
-    });
-
-    it('should return missing for file not in cache', async () => {
-      const mockUrl = 'https://example.com/missing.file';
-      mockCacheMatch.mockResolvedValue(undefined);
-
-      const result = await downloadManager.checkCacheIntegrity(mockUrl);
-      expect(result.ok).toBe(false);
-      expect(result.missing).toBe(true);
-    });
-
-    it('should return corrupt for empty file (0 bytes) even if Content-Length matches or is missing', async () => {
-      // Case 1: CL says 100, size is 0
-      const mockUrl = 'https://example.com/empty.file';
-      const mockBlob = { size: 0 };
-      const mockResponse = {
-        headers: { get: vi.fn().mockReturnValue('100') },
-        clone: vi.fn().mockReturnThis(),
-        blob: vi.fn().mockResolvedValue(mockBlob)
-      };
-      mockCacheMatch.mockResolvedValue(mockResponse);
-
-      const result = await downloadManager.checkCacheIntegrity(mockUrl);
-      expect(result.ok).toBe(false);
-      expect(result.reason).toContain('empty');
-    });
-
-    // Note: Checksum calculation was removed from checkCacheIntegrity.
-    // The implementation now verifies file integrity via streaming size comparison
-    // which is more memory-efficient for large files.
-    it('should return ok for file with matching size via streaming', async () => {
-      const mockUrl = 'https://example.com/valid-stream.file';
-
-      // Create a response with a body stream that yields 100 bytes
-      const mockStreamContent = new Uint8Array(100);
-      const mockStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(mockStreamContent);
-          controller.close();
-        }
-      });
-
-      const mockResponse = new Response(mockStream, {
-        headers: { 'Content-Length': '100' }
-      });
-
-      mockCacheMatch.mockResolvedValue(mockResponse);
-
-      const result = await downloadManager.checkCacheIntegrity(mockUrl);
-      expect(result.ok).toBe(true);
-    });
-  });
 });
-

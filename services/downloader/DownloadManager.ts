@@ -1,4 +1,4 @@
-import { getDB, getPartialDownload, saveChunk, clearPartialDownload } from './db';
+import { getDB, getPartialDownload, saveChunk, clearPartialDownload, getChunk } from './db';
 import { DownloadProgress } from './types';
 import { env } from '@huggingface/transformers';
 
@@ -122,47 +122,27 @@ export class DownloadManager {
     });
   }
 
-  // Helper to create a stream that reads sequentially from IndexedDB (Disk Mode)
-  // FIXED: Read all chunks upfront to avoid re-reading entire entry for each chunk
+  // Helper to create a stream that reads chunks sequentially from IndexedDB (Disk Mode)
   private createIDBStream(url: string, totalChunks: number): ReadableStream {
     let index = 0;
-    let cachedChunks: (Blob | Uint8Array)[] | null = null;
 
     return new ReadableStream({
       async pull(controller) {
         try {
-          // Read all chunks from IDB once on first pull
-          if (cachedChunks === null) {
-            const db = await getDB();
-            if (!db) {
-              controller.error(new Error('IndexedDB became unavailable during stream read'));
-              return;
-            }
-            const entry = await db.get('downloads', url);
-            if (!entry || !entry.chunks) {
-              controller.error(new Error(`Missing entry for ${url} in IDB`));
-              return;
-            }
-            cachedChunks = entry.chunks;
-          }
-
           if (index < totalChunks) {
-            const chunk = cachedChunks[index];
+            // Read next chunk from IDB
+            const chunk = await getChunk(url, index);
+
             if (!chunk) {
               controller.error(new Error(`Missing chunk ${index} for ${url} in IDB`));
               return;
             }
 
-            if (chunk instanceof Blob) {
-              const buffer = await new Response(chunk).arrayBuffer();
-              controller.enqueue(new Uint8Array(buffer));
-            } else {
-              controller.enqueue(chunk);
-            }
+            const buffer = await new Response(chunk).arrayBuffer();
+            controller.enqueue(new Uint8Array(buffer));
             index++;
           } else {
             controller.close();
-            cachedChunks = null; // Free memory
           }
         } catch (e) {
           controller.error(e);
@@ -197,17 +177,44 @@ export class DownloadManager {
     // 2. Check partial download in IndexedDB (will return null if IDB unavailable)
     const partial = await getPartialDownload(url);
     let startByte = 0;
-    let chunks: (Blob | Uint8Array)[] = [];
-    let currentTotal = 0;
+
+    // In memory mode, we track chunks here. In Disk mode, we don't.
+    // If we are resuming, we don't have the previous chunks in memory anymore (unless we read them, which we shouldn't).
+    // So if resuming in Disk Mode, 'downloadedChunks' will be empty, and we will only stream from IDB at the end.
+
+    let chunkIndex = 0;
 
     if (partial) {
-      console.log(`[DownloadManager] Resuming ${url} from ${partial.chunks.length} chunks...`);
-      chunks = partial.chunks;
-      // Calculate total size of existing chunks
-      for (const c of chunks) {
-        currentTotal += c instanceof Blob ? c.size : c.byteLength;
+      // partial is now Metadata: { chunkCount, totalBytes, ... }
+      console.log(`[DownloadManager] Resuming ${url} from ${partial.chunkCount} chunks...`);
+      // We need to calculate startByte. 
+      // If we didn't store individual chunk sizes in metadata, we have to trust totalBytes or sum them up?
+      // Wait, we don't know the size of existing chunks efficiently unless we read them or store running total.
+      // But we know 'totalBytes' in metadata is the *expected* total. That doesn't help with resume position.
+      // We need the size of what we have.
+
+      // FIX: accurately calculate startByte by summing sizes of existing chunks.
+      // Since we split the store, we have to iterate chunks. This is fast (metadata only usually or small blobs).
+      // Or we could have stored 'downloadedBytes' in metadata.
+      // For this immediate refactor, let's just sum them up. It's O(chunks), better than O(bytes).
+
+      // Wait, 'getPartialDownload' only returns metadata. 
+      // Let's iterate.
+      for (let i = 0; i < partial.chunkCount; i++) {
+        const chunk = await getChunk(url, i);
+        if (chunk) {
+          startByte += chunk.size;
+        } else {
+          // Missing a chunk? Broken state.
+          console.warn(`[DownloadManager] Missing chunk ${i} during resume calc. Restarting.`);
+          startByte = 0;
+          chunkIndex = 0;
+          await clearPartialDownload(url);
+          break;
+        }
       }
-      startByte = currentTotal;
+      chunkIndex = partial.chunkCount;
+      // If we broke loop, startByte is 0.
     }
 
     // 3. Fetch with Range
@@ -256,20 +263,41 @@ export class DownloadManager {
     if (startByte > 0 && response.status === 200) {
       console.warn('[DownloadManager] Server returned 200 instead of 206. Restarting download from scratch.');
       startByte = 0;
-      chunks = [];
-      currentTotal = 0;
+      chunkIndex = 0;
       await clearPartialDownload(url);
     }
 
-    let receivedLength = currentTotal;
-
-    let chunkIndex = chunks.length;
+    let receivedLength = startByte; // Start from what we have
 
     // We no longer keep ALL raw chunks in memory to avoid OOM.
-    // We only keep the chunks we've already converted to Blobs (flushed)
-    // plus the current pending buffer.
     // OPTIMIZATION: If IDB is enabled, we DO NOT populate this array to save RAM.
-    const downloadedChunks: (Blob | Uint8Array)[] = this.isIDBDisabled ? [...chunks] : [];
+    const downloadedChunks: (Blob | Uint8Array)[] = this.isIDBDisabled ? [] : [];
+    // Wait, if isIDBDisabled, we need to store them!
+    // If not, we don't.
+    // If we are resuming in Memory Mode (isIDBDisabled=true), we lost previous chunks!
+    // Memory mode cannot resume. So downloadedChunks should just start empty.
+
+    // If we were resuming from IDB but now IDB failed and we switched to Memory?
+    // We can't easily fetch previous chunks from IDB if it's disabled/unavailable.
+    // So falling back to memory usually implies restarting if we can't read partials.
+    // But here 'startByte' might be > 0 from when IDB *was* available.
+    // If IDB becomes unavailable mid-stream, we have a problem: we have half on disk, half in memory.
+    // Simpler approach: If IDB disabled, we only support full download in memory.
+    // If startByte > 0 and we are in memory mode, it's risky. But 'isIDBDisabled' checks happen before partial check.
+
+    if (this.isIDBDisabled && startByte > 0) {
+      // We can't resume because we can't read old chunks.
+      console.warn('[DownloadManager] Cannot resume in memory-only mode. Restarting.');
+      startByte = 0;
+      receivedLength = 0;
+      chunkIndex = 0;
+      // headers was already sent with Range... we might need to re-fetch if we can't use this response.
+      // But we already got response. 
+      // If response is 206, we are missing beginning. We must re-fetch.
+      // We'll throw/recurse? Or just failed.
+      throw new Error('Cannot resume download without IndexedDB. Please retry.');
+    }
+
 
     if (!isComplete) {
       const reader = response.body?.getReader();
@@ -281,9 +309,6 @@ export class DownloadManager {
       // Buffer for saving chunks to IDB less frequently (optimization)
       let pendingChunks: Uint8Array[] = [];
       let pendingSize = 0;
-
-      // Flag to disable IDB writes if we hit a quota error (e.g. Incognito)
-      // No local flag needed, use class-level property
 
       const flushBuffer = async () => {
         if (pendingChunks.length === 0) return;
@@ -304,8 +329,6 @@ export class DownloadManager {
                 if (!shouldContinue) {
                   throw new Error('Download aborted by user due to storage quota limits.');
                 }
-                // If resolved true, isIDBDisabled should have been set to true by the first caller,
-                // but let's be safe and fall through.
               } else {
                 // We are the first to hit the error
                 if (this.quotaErrorHandler) {
@@ -321,8 +344,6 @@ export class DownloadManager {
                   this.isIDBDisabled = true;
                   console.warn('[DownloadManager] Continuing ALL downloads in memory-only mode.');
                 } else {
-                  // No handler? Default to memory mode silently? 
-                  // Or warn. Let's warn and disable.
                   console.warn('[DownloadManager] No quota handler set. Defaulting to memory-only mode.');
                   this.isIDBDisabled = true;
                 }
@@ -376,7 +397,6 @@ export class DownloadManager {
     console.log(`[DownloadManager] Download complete for ${url}. Assembling and caching...`);
 
     // Validation: Ensure we actually received the full file
-    // Validation: Ensure we actually received the full file
     // If complete (416 code path), receivedLength might not be updated, but startByte is totalSize.
     const finalLength = isComplete ? startByte : receivedLength;
     if (totalSize > 0 && finalLength !== totalSize) {
@@ -389,13 +409,12 @@ export class DownloadManager {
     let stream: ReadableStream;
     if (this.isIDBDisabled) {
       // Memory mode: Stream from the array of blobs we kept
+      // If we switched mid-stream, this will be partial and fail validation effectively (or create corrupt file).
+      // Ideally we should warn or try to read from IDB if check failed.
       stream = this.createBlobStream(downloadedChunks as Blob[]);
     } else {
       // Disk mode: Stream from IDB chunks
-      // We know how many chunks we wrote: `chunkIndex` (which is incremented post-write)
-      // actually check chunkIndex usage.
-      // In flushBuffer: chunkIndex++ happens AFTER saveChunk start.
-      // The total number of chunks written is `chunkIndex` (at loop end).
+      // chunkIndex is the count of chunks we wrote (or skipped).
       stream = this.createIDBStream(url, chunkIndex);
     }
 
@@ -485,4 +504,3 @@ export class DownloadManager {
 }
 
 export const downloadManager = DownloadManager.getInstance();
-

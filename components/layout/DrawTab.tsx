@@ -24,13 +24,12 @@ const DrawTab: React.FC<DrawTabProps> = ({
         isInferencing,
         activeInferenceTab,
         loadedStrokes,
-        sessionId,
         refreshSession,
         customNotification
     } = useAppContext();
 
     const { theme } = useThemeContext();
-    const { addToHistory } = useHistoryContext();
+    const { } = useHistoryContext();
 
     const isDrawInferencing = activeInferenceTab === 'draw';
 

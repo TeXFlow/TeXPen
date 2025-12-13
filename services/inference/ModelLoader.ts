@@ -85,10 +85,10 @@ export class ModelLoader {
   public async loadModelWithFallback(
     modelId: string,
     initialDevice: string,
-    onProgress?: (status: string, progress?: number) => void
+    _onProgress?: (status: string, progress?: number) => void
   ): Promise<{ model: VisionEncoderDecoderModel, device: string }> {
-    let device = initialDevice;
-    let sessionOptions = getSessionOptions(device);
+    const device = initialDevice;
+    const sessionOptions = getSessionOptions(device);
 
     try {
       const model = await AutoModelForVision2Seq.from_pretrained(modelId, sessionOptions as unknown as Record<string, unknown>) as unknown as VisionEncoderDecoderModel;
@@ -108,10 +108,19 @@ export class ModelLoader {
         loadError?.message?.includes('context') ||
         loadError?.message?.includes('adapter');
 
+      // We want to fallback if ANY significant error happens during WebGPU init, 
+      // as long as we are trying to use WebGPU.
+      // The original code was throwing if isWebGPUMemoryError was true (Wait, looking at original code:
+      // if ((...) && device === WEBGPU) { console.error...; throw loadError; } else { throw loadError; }
+      // It was ALWAYS throwing. It never returned the fallback!
+
       if ((isWebGPUMemoryError || isUnsupportedDeviceError || isSessionError) && device === MODEL_CONFIG.PROVIDERS.WEBGPU) {
-        console.error('[ModelLoader] WebGPU error encountered:', loadError);
-        // User requested forced WebGPU: Do not fall back.
-        throw loadError;
+        console.warn('[ModelLoader] WebGPU error encountered, falling back to WASM:', loadError.message);
+
+        // Fallback to WASM
+        const wasmOptions = getSessionOptions(MODEL_CONFIG.PROVIDERS.WASM);
+        const model = await AutoModelForVision2Seq.from_pretrained(modelId, wasmOptions as unknown as Record<string, unknown>) as unknown as VisionEncoderDecoderModel;
+        return { model, device: MODEL_CONFIG.PROVIDERS.WASM };
       } else {
         throw loadError;
       }

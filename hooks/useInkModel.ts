@@ -60,7 +60,7 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
     reject: (reason?: unknown) => void;
   } | null>(null);
 
-  const debounceTimeoutRef = useRef<{ timer: ReturnType<typeof setTimeout>; resolve: (value: any) => void } | null>(null);
+  const debounceTimeoutRef = useRef<{ timer: ReturnType<typeof setTimeout>; resolve: (value: unknown) => void } | null>(null);
 
   const [loadingPhase, setLoadingPhase] = useState<string>('');
   const [progress, setProgress] = useState(0);

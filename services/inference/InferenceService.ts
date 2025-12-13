@@ -23,7 +23,7 @@ export class InferenceService {
   }>();
 
   private constructor() {
-    this.queue = new InferenceQueue((req) => this.runInference(req));
+    this.queue = new InferenceQueue((req, signal) => this.runInference(req, signal));
   }
 
   public static getInstance(): InferenceService {
@@ -103,27 +103,49 @@ export class InferenceService {
   }
 
   private async runInference(
-    req: InferenceRequest
+    req: InferenceRequest,
+    signal: AbortSignal
   ): Promise<void> {
     this.initWorker();
 
     const id = crypto.randomUUID();
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
       // Note: We don't support aborting the worker mid-flight easily.
       // If the queue skips a request, it just doesn't call this.
       // If this is running, we let it finish.
 
       const { onPreprocess, ...workerOptions } = req.options;
 
+      const cleanup = () => {
+        this.pendingRequests.delete(id);
+        signal.removeEventListener('abort', onAbort);
+      };
+
+      const onAbort = () => {
+        // Queue aborted this request
+        cleanup();
+        req.reject(new Error("Aborted"));
+        resolve(); // Let the queue proceed
+      };
+
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+
+      signal.addEventListener('abort', onAbort);
+
       // Register the ID so we can resolve the queue's request when worker replies
       this.pendingRequests.set(id, {
         resolve: (data) => {
+          cleanup();
           // Success: Resolve the queue's request
           req.resolve(data as InferenceResult);
           resolve();
         },
         reject: (err) => {
+          cleanup();
           req.reject(err);
           resolve(); // We resolved the processor promise even if it failed, so queue can continue
         },

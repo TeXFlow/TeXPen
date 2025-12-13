@@ -21,7 +21,6 @@ const UploadTab: React.FC<UploadTabProps> = ({
         status,
         latex,
         userConfirmed,
-        isInferencing,
         activeInferenceTab,
         uploadPreview,
         showUploadResult,

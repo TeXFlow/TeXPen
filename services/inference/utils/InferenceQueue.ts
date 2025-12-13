@@ -8,7 +8,8 @@ export type InferenceRequest = {
 };
 
 export type InferenceProcessor = (
-  req: InferenceRequest
+  req: InferenceRequest,
+  signal: AbortSignal
 ) => Promise<void>;
 
 /**
@@ -20,6 +21,7 @@ export type InferenceProcessor = (
 export class InferenceQueue {
   private pendingRequest: InferenceRequest | null = null;
   private isProcessing = false;
+  private abortController: AbortController | null = null;
 
   constructor(private processor: InferenceProcessor) { }
 
@@ -42,13 +44,16 @@ export class InferenceQueue {
       // 3. Trigger processing if not already running.
       if (!this.isProcessing) {
         this.processNext();
+      } else {
+        // If we are processing, we should abort the current one so we can prioritize the new one (latest stroke)
+        // This makes the UI snappier by not waiting for stale results.
+        this.abortController?.abort();
       }
     });
   }
 
   private async processNext() {
     // Safety check: if already processing, do nothing (the loop/recursion will handle it)
-    // Actually, we use a recursive-like pattern to ensure sequentiality without while loops that might hang.
     if (this.isProcessing) return;
 
     // If no request waiting, we are done.
@@ -61,15 +66,19 @@ export class InferenceQueue {
     const req = this.pendingRequest;
     this.pendingRequest = null; // Clear it so a new one can fill the slot
 
+    this.abortController = new AbortController();
+    const signal = this.abortController.signal;
+
     try {
-      await this.processor(req);
+      await this.processor(req, signal);
     } catch (error) {
       // Processor errors should usually be handled by the processor calling req.reject,
       // but if it throws synchronously or unexpectedly:
       console.error("[InferenceQueue] Processor error:", error);
-      try { req.reject(error); } catch { }
+      try { req.reject(error); } catch { /* ignore */ }
     } finally {
       this.isProcessing = false;
+      this.abortController = null;
       // Loop: check if a new request arrived while we were working
       if (this.pendingRequest) {
         this.processNext();
@@ -82,6 +91,11 @@ export class InferenceQueue {
     if (this.pendingRequest) {
       this.pendingRequest.reject(new Error("Aborted"));
       this.pendingRequest = null;
+    }
+    // Abort any running request
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
     }
     this.isProcessing = false;
   }

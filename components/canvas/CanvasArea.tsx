@@ -84,7 +84,12 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({ theme, onStrokeEnd, onClear, in
         if (contentCanvasRef.current) {
             // History is now handled per-stroke in handleStrokeAdded
             // We only trigger the parent's onStrokeEnd (inference) here
-            onStrokeEnd(contentCanvasRef.current, strokesRef.current);
+            // Deep copy to prevent history mutation
+            const strokesCopy = strokesRef.current.map(s => ({
+                ...s,
+                points: s.points.map(p => ({ ...p }))
+            }));
+            onStrokeEnd(contentCanvasRef.current, strokesCopy);
         }
     }, [onStrokeEnd]);
 

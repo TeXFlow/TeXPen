@@ -35,6 +35,7 @@ const MathHistoryItem: React.FC<{ latex: string }> = ({ latex }) => {
 
     useEffect(() => {
         let isMounted = true;
+        let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
         const renderMath = () => {
             if (!isMounted || !ref.current) return;
@@ -46,7 +47,7 @@ const MathHistoryItem: React.FC<{ latex: string }> = ({ latex }) => {
                 }).catch((err: Error) => console.error('MathJax error:', err));
             } else {
                 // Retry if MathJax isn't ready yet
-                setTimeout(renderMath, 100);
+                retryTimeoutId = setTimeout(renderMath, 100);
             }
         };
 
@@ -54,6 +55,7 @@ const MathHistoryItem: React.FC<{ latex: string }> = ({ latex }) => {
 
         return () => {
             isMounted = false;
+            if (retryTimeoutId) clearTimeout(retryTimeoutId);
         };
     }, [cleanLatex, checkResize]);
 

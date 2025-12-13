@@ -48,6 +48,8 @@ const MathCandidateBase: React.FC<{ latex: string }> = ({ latex }) => {
 
     useEffect(() => {
         let isMounted = true;
+        let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        let resizeTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
         const renderMath = () => {
             if (!isMounted || !ref.current) return;
@@ -58,14 +60,16 @@ const MathCandidateBase: React.FC<{ latex: string }> = ({ latex }) => {
                 window.MathJax.typesetPromise([ref.current]).then(() => {
                     // Trigger resize check after typesetting
                     // Small delay to ensure layout is done
-                    if (isMounted) setTimeout(checkResize, 10);
+                    if (isMounted) {
+                        resizeTimeoutId = setTimeout(checkResize, 10);
+                    }
                 }).catch((err: Error) => {
                     console.error('MathJax error:', err);
                     if (ref.current && isMounted) ref.current.textContent = cleanLatex;
                 });
             } else {
                 // Retry if MathJax isn't ready yet
-                setTimeout(renderMath, 100);
+                retryTimeoutId = setTimeout(renderMath, 100);
             }
         };
 
@@ -73,6 +77,8 @@ const MathCandidateBase: React.FC<{ latex: string }> = ({ latex }) => {
 
         return () => {
             isMounted = false;
+            if (retryTimeoutId) clearTimeout(retryTimeoutId);
+            if (resizeTimeoutId) clearTimeout(resizeTimeoutId);
         };
     }, [cleanLatex, checkResize]);
 

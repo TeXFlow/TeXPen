@@ -27,6 +27,7 @@ export class InferenceService {
 
   private currentModelId: string = MODEL_CONFIG.ID;
   private initPromise: Promise<void> | null = null;
+  private isLoading: boolean = false;
 
   private queue: InferenceQueue;
 
@@ -48,10 +49,17 @@ export class InferenceService {
     onProgress?: (status: string, progress?: number) => void,
     options: InferenceOptions = {}
   ): Promise<void> {
+    // Robust guard: if already loading, wait for current load
+    if (this.isLoading && this.initPromise) {
+      return this.initPromise;
+    }
+
     // If initialization is already in progress, return the existing promise
     if (this.initPromise) {
       return this.initPromise;
     }
+
+    this.isLoading = true;
 
     // Append our actual work to the mutex chain
     const work = async () => {
@@ -73,6 +81,7 @@ export class InferenceService {
     try {
       await this.initPromise;
     } finally {
+      this.isLoading = false;
       this.initPromise = null;
     }
   }
@@ -442,6 +451,7 @@ export class InferenceService {
     }
     this.tokenizer = null;
     this.initPromise = null;
+    this.isLoading = false;
   }
 
   /**
@@ -483,6 +493,7 @@ export class InferenceService {
 
     this.tokenizer = null;
     this.initPromise = null;
+    this.isLoading = false;
   }
 }
 

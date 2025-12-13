@@ -6,6 +6,7 @@ export { MODEL_CONFIG, GENERATION_CONFIG };
 
 export interface SessionConfig {
   device: string;
+  dtype: string;
   encoder_model_file_name: string;
   decoder_model_file_name: string;
 }
@@ -13,6 +14,9 @@ export interface SessionConfig {
 export function getSessionOptions(device: string): SessionConfig {
   return {
     device,
+    // Force fp32 to prevent transformers.js from auto-selecting quantized models
+    // which may not exist on the model repository
+    dtype: 'fp32',
     encoder_model_file_name: 'encoder_model.onnx',
     decoder_model_file_name: 'decoder_with_past_model.onnx',
   };

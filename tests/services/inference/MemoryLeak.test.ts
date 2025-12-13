@@ -1,25 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { InferenceService } from '../../../services/inference/InferenceService';
 
-describe('InferenceService Memory Leak / Race Condition', () => {
-  let inferenceService: InferenceService;
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { InferenceEngine } from '../../../services/inference/InferenceEngine';
+
+describe('InferenceService Memory Leak / Race Condition (InferenceEngine)', () => {
+  let engine: InferenceEngine;
 
   beforeEach(() => {
-    // Reset instance for isolation
-    // We access the private singleton via any cast or just get it if public
-    // But since it's a singleton, we might need to reset it.
-    // The code has `getOrCreateInstance`.
-    // We can assume `getInstance` returns the same one.
-    // We might need to manually dispose it first.
-    inferenceService = InferenceService.getInstance();
-
-    // Clear any previous state
-    inferenceService.disposeSync();
+    engine = new InferenceEngine();
     vi.clearAllMocks();
   });
 
   afterEach(async () => {
-    await inferenceService.dispose();
+    await engine.dispose();
   });
 
   it('should not load model if disposed immediately after init call (queued init race)', async () => {
@@ -45,12 +37,11 @@ describe('InferenceService Memory Leak / Race Condition', () => {
     vi.spyOn(modelLoader, 'preDownloadModels').mockResolvedValue(undefined);
 
     // 2. Call init (this will get queued and start waiting on our slow load)
-    const initPromise = inferenceService.init(undefined, { device: 'cpu' as any });
+    const initPromise = engine.init(undefined, { device: 'cpu' as any });
 
     // 3. IMMEDIATELY call dispose.
     // This increments the generation BEFORE the actual "loadModelWithFallback" finishes
-    // (or even starts, depending on mutex timing, but definitely before it returns).
-    await inferenceService.dispose();
+    await engine.dispose();
 
     // 4. Now release the lock (finish the load)
     resolveLoad!({});
@@ -59,11 +50,10 @@ describe('InferenceService Memory Leak / Race Condition', () => {
     await initPromise;
 
     // 6. Assertions
-    // The model should NOT be set on the service
+    // The model should NOT be set on the engine
     // @ts-ignore - accessing private field
-    expect(inferenceService.model).toBeNull();
+    expect(engine.model).toBeNull();
     // @ts-ignore - accessing private field
-    expect(inferenceService.tokenizer).toBeNull();
-
+    expect(engine.tokenizer).toBeNull();
   });
 });

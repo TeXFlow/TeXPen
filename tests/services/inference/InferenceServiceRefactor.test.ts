@@ -1,7 +1,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { InferenceService } from '../../../services/inference/InferenceService';
+import { InferenceEngine } from '../../../services/inference/InferenceEngine'; // CHANGED: Target Engine
 import { SamplingOptions } from '../../../services/inference/types';
 
 // Mock dependencies
@@ -25,7 +25,8 @@ vi.mock('../../../utils/latex', () => ({
 vi.mock('../../../services/inference/config', () => ({
   MODEL_CONFIG: {
     DEFAULT_QUANTIZATION: 'q8',
-    ID: 'test-model'
+    ID: 'test-model',
+    PROVIDERS: { WEBGPU: 'webgpu', WASM: 'wasm' }
   },
   getSessionOptions: vi.fn(),
   getGenerationConfig: vi.fn().mockReturnValue({
@@ -35,28 +36,27 @@ vi.mock('../../../services/inference/config', () => ({
   })
 }));
 
-describe('InferenceService Refactor Logic', () => {
-  let service: InferenceService;
+describe('InferenceService Refactor Logic (InferenceEngine)', () => {
+  let engine: InferenceEngine;
   let mockModel: any;
   let mockTokenizer: any;
 
   beforeEach(() => {
-    // Reset singleton
-    (InferenceService as any).instance = null;
-    service = InferenceService.getInstance();
+    engine = new InferenceEngine();
 
     // Mock internal model and tokenizer
     mockModel = {
       generate: vi.fn().mockResolvedValue([[101, 102]]),
-      dispose: vi.fn()
+      dispose: vi.fn(),
+      config: { device: 'webgpu' }
     };
     mockTokenizer = {
       batch_decode: vi.fn().mockReturnValue(['decoded_latex'])
     };
 
     // Inject mocks directly
-    (service as any).model = mockModel;
-    (service as any).tokenizer = mockTokenizer;
+    (engine as any).model = mockModel;
+    (engine as any).tokenizer = mockTokenizer;
   });
 
   afterEach(() => {
@@ -73,7 +73,7 @@ describe('InferenceService Refactor Logic', () => {
       num_beams: 1 // Candidates = 1
     };
 
-    const result = await service.infer(blob, options);
+    const result = await engine.infer(blob, options);
 
     // Verify result
     expect(result.candidates).toEqual(['decoded_latex']);
@@ -101,7 +101,7 @@ describe('InferenceService Refactor Logic', () => {
     // but here we just count calls.
     mockModel.generate.mockResolvedValue([[101]]);
 
-    await service.infer(blob, options);
+    await engine.infer(blob, options);
 
     // Should call generate 2 times (manual loop)
     expect(mockModel.generate).toHaveBeenCalledTimes(2);
@@ -123,7 +123,7 @@ describe('InferenceService Refactor Logic', () => {
       num_beams: 3
     };
 
-    await service.infer(blob, options);
+    await engine.infer(blob, options);
 
     expect(beamSearch).toHaveBeenCalled();
     expect(mockModel.generate).not.toHaveBeenCalled();

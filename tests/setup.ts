@@ -80,6 +80,36 @@ if (typeof Image === 'undefined') {
   (global as any).Image = Image;
 }
 
+if (typeof Worker === 'undefined') {
+  (global as any).Worker = class Worker {
+    url: string;
+    onmessage: ((e: any) => void) | null = null;
+    onerror: ((e: any) => void) | null = null;
+
+    constructor(stringUrl: string | URL) {
+      this.url = stringUrl.toString();
+    }
+
+    postMessage(data: any) {
+      // Default: do nothing, or maybe trigger onmessage in a real integration test
+    }
+
+    terminate() { }
+
+    addEventListener(type: string, listener: any) {
+      if (type === 'message') this.onmessage = listener;
+      if (type === 'error') this.onerror = listener;
+    }
+
+    removeEventListener(type: string, listener: any) {
+      if (type === 'message' && this.onmessage === listener) this.onmessage = null;
+      if (type === 'error' && this.onerror === listener) this.onerror = null;
+    }
+
+    dispatchEvent() { return false; }
+  } as any;
+}
+
 // MOCK CANVAS
 // Properly mock document.createElement to return @napi-rs/canvas canvases for reliable testing
 const originalCreateElement = (global as any).document.createElement.bind((global as any).document);

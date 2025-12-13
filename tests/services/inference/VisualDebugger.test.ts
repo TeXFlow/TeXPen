@@ -1,7 +1,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { InferenceService } from '../../../services/inference/InferenceService';
+import { InferenceEngine } from '../../../services/inference/InferenceEngine'; // CHANGED: Target Engine
 import { SamplingOptions } from '../../../services/inference/types';
 
 // Mock dependencies
@@ -37,28 +37,27 @@ vi.mock('../../../services/inference/config', () => ({
   })
 }));
 
-describe('Visual Debugger Callback Verification', () => {
-  let service: InferenceService;
+describe('Visual Debugger Callback Verification (InferenceEngine)', () => {
+  let engine: InferenceEngine;
   let mockModel: any;
   let mockTokenizer: any;
 
   beforeEach(() => {
-    // Reset singleton
-    (InferenceService as any).instance = null;
-    service = InferenceService.getInstance();
+    engine = new InferenceEngine();
 
     // Mock internal model and tokenizer
     mockModel = {
       generate: vi.fn().mockResolvedValue([[101]]),
-      dispose: vi.fn()
+      dispose: vi.fn(),
+      config: { device: 'webgpu' }
     };
     mockTokenizer = {
       batch_decode: vi.fn().mockReturnValue(['decoded_latex'])
     };
 
     // Inject mocks directly to bypass init
-    (service as any).model = mockModel;
-    (service as any).tokenizer = mockTokenizer;
+    (engine as any).model = mockModel;
+    (engine as any).tokenizer = mockTokenizer;
   });
 
   afterEach(() => {
@@ -73,7 +72,7 @@ describe('Visual Debugger Callback Verification', () => {
       do_sample: false
     };
 
-    await service.infer(blob, options);
+    await engine.infer(blob, options);
 
     // Verify callback was called with the mock debug image
     expect(onPreprocess).toHaveBeenCalledWith('debug_image_data_url');

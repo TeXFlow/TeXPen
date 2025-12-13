@@ -131,7 +131,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [settingsFocus, setSettingsFocus] = useState<'modelId' | null>(null);
 
     // Custom Notification
-    const [customNotification, setCustomNotification] = useState<{ message: string; progress?: number } | null>(null);
+    const [customNotification, setCustomNotification] = useState<{ message: string; progress?: number; isLoading?: boolean } | null>(null);
 
     // Dialog configuration
     const [dialogConfig, setDialogConfig] = useState<{

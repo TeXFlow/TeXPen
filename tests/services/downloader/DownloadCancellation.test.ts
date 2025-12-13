@@ -36,13 +36,13 @@ vi.mock('../../../services/downloader/ChunkStore', () => {
 });
 
 // Mock global caches
-global.caches = {
+vi.stubGlobal('caches', {
   open: vi.fn(async () => ({
     delete: vi.fn(async () => { }),
     put: vi.fn(async () => { }),
     match: vi.fn(async () => null),
   })),
-} as unknown;
+});
 
 describe('DownloadManager Cancellation', () => {
   let downloadManager: DownloadManager;

@@ -145,8 +145,8 @@ describe('useInkModel', () => {
     it('allows inference when loaded from cache (auto confirmed)', async () => {
         // Mock cache hit with the expected Q8 files
         mockCache.keys.mockResolvedValue([
-            { url: `https://huggingface.co/${MODEL_CONFIG.ID}/resolve/main/onnx/encoder_model_int8.onnx` },
-            { url: `https://huggingface.co/${MODEL_CONFIG.ID}/resolve/main/onnx/decoder_with_past_model_int8.onnx` }
+            { url: `https://huggingface.co/${MODEL_CONFIG.ID}/resolve/main/onnx/encoder_model.onnx` },
+            { url: `https://huggingface.co/${MODEL_CONFIG.ID}/resolve/main/onnx/decoder_with_past_model.onnx` }
         ]);
 
         // Mock init to resolve
@@ -155,7 +155,7 @@ describe('useInkModel', () => {
             await new Promise(resolve => setTimeout(resolve, 50));
         });
 
-        const { result } = renderHook(() => useInkModel('light', MODEL_CONFIG.QUANTIZATION.Q8, MODEL_CONFIG.PROVIDERS.WASM));
+        const { result } = renderHook(() => useInkModel('light', MODEL_CONFIG.QUANTIZATION.FP32, MODEL_CONFIG.PROVIDERS.WASM));
 
         await waitFor(() => {
             expect(result.current.isLoadedFromCache).toBe(true);

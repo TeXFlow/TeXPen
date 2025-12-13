@@ -11,7 +11,7 @@ export interface SessionConfig {
   decoder_model_file_name: string;
 }
 
-export function getSessionOptions(device: string): SessionConfig {
+export function getSessionOptions(device: string, dtype?: string): SessionConfig {
   // We only support fp32 now
   return {
     device,

@@ -42,11 +42,10 @@ describe("ModelLoader Fallback Logic", () => {
 
     const result = await modelLoader.loadModelWithFallback(
       "test-model",
-      MODEL_CONFIG.PROVIDERS.WEBGPU,
-      "fp32"
+      MODEL_CONFIG.PROVIDERS.WEBGPU
     );
 
-    expect(result.device).toBe(MODEL_CONFIG.FALLBACK.PROVIDER);
+    expect(result.device).toBe(MODEL_CONFIG.PROVIDERS.WASM);
     expect(mockAutoModel.from_pretrained).toHaveBeenCalledTimes(2);
   });
 
@@ -58,11 +57,10 @@ describe("ModelLoader Fallback Logic", () => {
 
     const result = await modelLoader.loadModelWithFallback(
       "test-model",
-      MODEL_CONFIG.PROVIDERS.WEBGPU,
-      "fp32"
+      MODEL_CONFIG.PROVIDERS.WEBGPU
     );
 
-    expect(result.device).toBe(MODEL_CONFIG.FALLBACK.PROVIDER);
+    expect(result.device).toBe(MODEL_CONFIG.PROVIDERS.WASM);
     expect(mockAutoModel.from_pretrained).toHaveBeenCalledTimes(2);
   });
 
@@ -74,8 +72,7 @@ describe("ModelLoader Fallback Logic", () => {
     await expect(
       modelLoader.loadModelWithFallback(
         "test-model",
-        MODEL_CONFIG.PROVIDERS.WEBGPU,
-        "fp32"
+        MODEL_CONFIG.PROVIDERS.WEBGPU
       )
     ).rejects.toThrow("Network connection lost");
 

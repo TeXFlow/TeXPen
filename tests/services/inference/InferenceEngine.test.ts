@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest';
-import { InferenceService } from '../../../services/inference/InferenceService';
+import { InferenceEngine } from '../../../services/inference/InferenceEngine';
 import { InferenceOptions } from '../../../services/inference/types';
 
 // Mock DownloadManager to prevent 300MB downloads while keeping Service logic "legit"
@@ -41,8 +41,8 @@ vi.mock('../../../services/downloader/DownloadManager', () => {
   };
 });
 
-describe('InferenceService Integration (Efficient)', () => {
-  let inferenceService: InferenceService;
+describe('InferenceEngine Integration (Logic)', () => {
+  let inferenceEngine: InferenceEngine;
 
   beforeAll(() => {
     // Simulate WebGPU availability for the fallback test
@@ -60,8 +60,7 @@ describe('InferenceService Integration (Efficient)', () => {
   });
 
   beforeEach(() => {
-    // Reset singleton if needed or just get instance
-    inferenceService = InferenceService.getInstance();
+    inferenceEngine = new InferenceEngine();
     vi.clearAllMocks();
   });
 
@@ -91,7 +90,7 @@ describe('InferenceService Integration (Efficient)', () => {
     console.log('[Test] Starting legit initialization with mocked network...');
 
     try {
-      await inferenceService.init((status) => {
+      await inferenceEngine.init((status) => {
         console.log(`[Test Progress] ${status}`);
       }, options);
     } catch (error: any) {
@@ -129,7 +128,7 @@ describe('InferenceService Integration (Efficient)', () => {
       // but init() will fail (as seen in previous test).
 
       // So we just catch the error and verify it's the expected one.
-      await inferenceService.infer(new Blob([]), {});
+      await inferenceEngine.infer(new Blob([]), {});
     } catch (e: any) {
       // Expected since init failed or model is missing
       expect(e).toBeDefined();

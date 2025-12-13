@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { downloadManager } from '../../../services/downloader/DownloadManager';
 import { createSHA256 } from 'hash-wasm';
 
@@ -47,7 +47,7 @@ describe('DownloadManager V3', () => {
       update: vi.fn(),
       digest: vi.fn()
     };
-    (createSHA256 as any).mockResolvedValue(mockHasher);
+    (createSHA256 as unknown as { mockResolvedValue: (val: unknown) => void }).mockResolvedValue(mockHasher);
 
     // Case 1: Match
     mockHasher.digest.mockReturnValue('01');
@@ -59,7 +59,7 @@ describe('DownloadManager V3', () => {
     const mockCaches = {
       open: vi.fn().mockResolvedValue(mockCache),
     };
-    (global as any).caches = mockCaches;
+    (global as unknown as { caches: unknown }).caches = mockCaches;
 
     // Expected hash
     const expectedHash = '01';

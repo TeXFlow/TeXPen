@@ -1,5 +1,5 @@
 
-import { ParallelDownloader, ParallelDownloadProgress } from './ParallelDownloader';
+import { ParallelDownloader } from './ParallelDownloader';
 import { ChunkStore } from './ChunkStore';
 import { env } from '@huggingface/transformers';
 import { DownloadProgress } from './types';
@@ -9,7 +9,7 @@ export class DownloadManager {
   private static instance: DownloadManager;
   private store: ChunkStore;
   private activeDownloads: Map<string, ParallelDownloader> = new Map();
-  private queue: Array<{ url: string, onProgress?: (p: DownloadProgress) => void, resolve: () => void, reject: (err: any) => void }> = [];
+  private queue: Array<{ url: string, onProgress?: (p: DownloadProgress) => void, resolve: () => void, reject: (err: unknown) => void }> = [];
   private activeCount = 0;
   private MAX_CONCURRENT_FILES = 2; // Mobile friendly limit
 
@@ -24,7 +24,7 @@ export class DownloadManager {
     return DownloadManager.instance;
   }
 
-  public setQuotaErrorHandler(handler: () => Promise<boolean>) {
+  public setQuotaErrorHandler() {
     // TODO: Implement quota handling in V3
     console.warn('Quota handling not yet implemented in V3');
   }
@@ -95,7 +95,7 @@ export class DownloadManager {
           loaded: p.loaded,
           total: p.total,
           file: url.split('/').pop() || 'unknown'
-        } as any);
+        });
       }
     });
 

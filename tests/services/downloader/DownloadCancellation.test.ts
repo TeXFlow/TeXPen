@@ -1,8 +1,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DownloadManager } from '../../../services/downloader/DownloadManager';
-import { ParallelDownloader } from '../../../services/downloader/ParallelDownloader';
-import { ChunkStore } from '../../../services/downloader/ChunkStore';
+
 
 // Mock dependencies
 vi.mock('../../../services/downloader/ParallelDownloader', () => {
@@ -10,16 +9,16 @@ vi.mock('../../../services/downloader/ParallelDownloader', () => {
     ParallelDownloader: class MockParallelDownloader {
       start = vi.fn(() => {
         return new Promise((resolve, reject) => {
-          (this as any)._reject = reject;
+          (this as unknown as { _reject: (reason?: unknown) => void })._reject = reject;
         });
       });
       abort = vi.fn(() => {
-        if ((this as any)._reject) {
-          (this as any)._reject(new Error('Download aborted'));
+        if ((this as unknown as { _reject: (reason?: unknown) => void })._reject) {
+          (this as unknown as { _reject: (reason?: unknown) => void })._reject(new Error('Download aborted'));
         }
       });
 
-      constructor(public url: string, public store: any, public options: any) { }
+      constructor(public url: string, public store: unknown, public options: unknown) { }
     }
   };
 });
@@ -43,7 +42,7 @@ global.caches = {
     put: vi.fn(async () => { }),
     match: vi.fn(async () => null),
   })),
-} as any;
+} as unknown;
 
 describe('DownloadManager Cancellation', () => {
   let downloadManager: DownloadManager;
@@ -52,9 +51,9 @@ describe('DownloadManager Cancellation', () => {
     downloadManager = DownloadManager.getInstance();
 
     // Reset state manually
-    (downloadManager as any).activeDownloads.clear();
-    (downloadManager as any).queue = [];
-    (downloadManager as any).activeCount = 0;
+    (downloadManager as unknown as { activeDownloads: Map<string, unknown> }).activeDownloads.clear();
+    (downloadManager as unknown as { queue: unknown[] }).queue = [];
+    (downloadManager as unknown as { activeCount: number }).activeCount = 0;
   });
 
   afterEach(() => {
@@ -68,12 +67,12 @@ describe('DownloadManager Cancellation', () => {
     // Wait for it to start
     await new Promise(r => setTimeout(r, 0));
 
-    expect((downloadManager as any).activeDownloads.has(url)).toBe(true);
+    expect((downloadManager as unknown as { activeDownloads: Map<string, unknown> }).activeDownloads.has(url)).toBe(true);
 
     await downloadManager.deleteFromCache(url);
 
     await expect(p).rejects.toThrow('Download aborted');
-    expect((downloadManager as any).activeDownloads.has(url)).toBe(false);
+    expect((downloadManager as unknown as { activeDownloads: Map<string, unknown> }).activeDownloads.has(url)).toBe(false);
   });
 
   it('should remove from queue if cancelled before starting', async () => {
@@ -81,16 +80,16 @@ describe('DownloadManager Cancellation', () => {
     const url2 = 'https://example.com/2';
     const url3 = 'https://example.com/3';
 
-    const p1 = downloadManager.downloadFile(url1);
-    const p2 = downloadManager.downloadFile(url2);
+    downloadManager.downloadFile(url1);
+    downloadManager.downloadFile(url2);
     const p3 = downloadManager.downloadFile(url3);
 
     await new Promise(r => setTimeout(r, 0));
-    expect((downloadManager as any).queue.length).toBe(1);
+    expect((downloadManager as unknown as { queue: unknown[] }).queue.length).toBe(1);
 
     await downloadManager.cancelDownload(url3);
 
     await expect(p3).rejects.toThrow('Download cancelled');
-    expect((downloadManager as any).queue.length).toBe(0);
+    expect((downloadManager as unknown as { queue: unknown[] }).queue.length).toBe(0);
   });
 });

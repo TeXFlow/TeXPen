@@ -16,7 +16,7 @@ export class ParallelDownloader {
   private concurrency = 4;
   private abortController: AbortController;
   private onProgress?: ProgressCallback;
-  private rejecter?: (reason?: any) => void;
+  private rejecter?: (reason?: unknown) => void;
 
   constructor(url: string, store: ChunkStore, options?: { chunkSize?: number, concurrency?: number, onProgress?: ProgressCallback }) {
     this.url = url;

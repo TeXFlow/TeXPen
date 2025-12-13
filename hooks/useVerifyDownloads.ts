@@ -7,7 +7,6 @@ export const useVerifyDownloads = () => {
     openDialog,
     closeDialog,
     provider,
-    quantization,
     customModelId
   } = useAppContext();
 

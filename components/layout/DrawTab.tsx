@@ -35,15 +35,7 @@ const DrawTab: React.FC<DrawTabProps> = ({
     const isDrawInferencing = activeInferenceTab === 'draw';
 
     const handleClear = () => {
-        if (latex && latex.trim()) {
-            addToHistory({
-                id: Date.now().toString(),
-                latex: latex,
-                timestamp: Date.now(),
-                source: 'draw',
-                sessionId
-            });
-        }
+
         clearModel();
         refreshSession();
     };

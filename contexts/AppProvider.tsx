@@ -30,6 +30,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status,
         infer: modelInfer,
         inferFromUrl: modelInferFromUrl,
+        inferParagraph,
         loadingPhase,
         isInferencing,
         numCandidates,
@@ -62,10 +63,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLatex,
         setSelectedIndex,
         selectCandidate,
+        paragraphResult,
+        setParagraphResult,
+        inferenceMode,
+        setInferenceMode,
         setUploadPreview,
         setShowUploadResult,
         clearTabState,
         updateDrawResult,
+        updateDrawParagraphResult,
         updateUploadResult,
         loadDrawState,
         setDrawState,
@@ -86,14 +92,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         startDrawInference();
 
         try {
-            const result = await modelInfer(canvas, {
-                onPreprocess: (debugImage) => {
+            const configWithDebug = {
+                onPreprocess: (debugImage: string) => {
                     setDrawState(prev => ({ ...prev, debugImage }));
                 }
-            });
-            if (result) {
-                updateDrawResult(result);
-                return result;
+            };
+
+            if (inferenceMode === 'paragraph') {
+                const result = await inferParagraph(canvas, configWithDebug);
+                if (result) {
+                    updateDrawParagraphResult(result);
+                    // Return type mismatch handling if needed, or unify return type?
+                    // infer expects Promise<{ latex: string; candidates: Candidate[] } | null>
+                    // But paragraph returns different shape.
+                    // Consumers of `infer` (DrawTab) currently ignore the return value mostly or use it for specialized things?
+                    // DrawTab: await onInference(canvas, strokes); -> void mostly.
+                    return null; // For now return null or cast if needed, since state is updated via updateDrawParagraphResult
+                }
+            } else {
+                const result = await modelInfer(canvas, configWithDebug);
+                if (result) {
+                    updateDrawResult(result);
+                    return result;
+                }
             }
             return null;
         } finally {
@@ -200,6 +221,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         latex,
         setLatex,
         candidates,
+        paragraphResult,
+        setParagraphResult,
         loadedStrokes,
         infer,
         inferFromUrl,
@@ -263,7 +286,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setShowUploadResult,
 
         // Inference State
+        // Inference State
         activeInferenceTab,
+        inferenceMode,
+        setInferenceMode,
 
         // Custom Notification
         customNotification,

@@ -3,11 +3,13 @@ import { useMathJax } from '../../hooks/useMathJax';
 
 interface OutputDisplayProps {
     latex: string;
+    markdown?: string;
+    inferenceMode?: 'formula' | 'paragraph';
     isInferencing?: boolean;
     className?: string;
 }
 
-const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = false, className }) => {
+const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, markdown, inferenceMode = 'formula', isInferencing = false, className }) => {
     // Trigger MathJax on latex change OR when inferencing ends (spinner hidden)
     useMathJax({ latex, isInferencing }, 'latex-output');
 
@@ -61,7 +63,8 @@ const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = fa
     }, [latex, isInferencing]); // Re-run when latex changes
 
     const handleCopy = () => {
-        if (latex) navigator.clipboard.writeText(latex);
+        const textToCopy = inferenceMode === 'paragraph' ? markdown : latex;
+        if (textToCopy) navigator.clipboard.writeText(textToCopy);
     };
 
     const sanitizeLatex = (text: string) => {
@@ -93,8 +96,16 @@ const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = fa
                                 <div className="absolute inset-0 border-2 border-cyan-500/30 dark:border-cyan-400/30 rounded-full"></div>
                                 <div className="absolute inset-0 border-2 border-cyan-500 dark:border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <span className="font-medium text-lg animate-pulse">Generating LaTeX...</span>
+                            <span className="font-medium text-lg animate-pulse">Generating {inferenceMode === 'paragraph' ? 'Text' : 'LaTeX'}...</span>
                         </div>
+                    ) : inferenceMode === 'paragraph' ? (
+                        markdown ? (
+                            <div className="text-left text-lg md:text-xl text-slate-800 dark:text-gray-200 whitespace-pre-wrap font-mono max-w-4xl mx-auto">
+                                {markdown}
+                            </div>
+                        ) : (
+                            <span className="text-slate-200 dark:text-white/5 font-medium text-3xl tracking-tight select-none">Paragraph preview...</span>
+                        )
                     ) : latex ? (
                         `\\[${sanitizeLatex(latex)}\\]`
                     ) : (
@@ -107,7 +118,7 @@ const OutputDisplay: React.FC<OutputDisplayProps> = ({ latex, isInferencing = fa
             <div className="absolute top-4 right-4 flex gap-2">
                 <button
                     onClick={handleCopy}
-                    disabled={!latex}
+                    disabled={inferenceMode === 'paragraph' ? !markdown : !latex}
                     className="p-2 text-slate-400 dark:text-white/30 hover:text-slate-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors disabled:opacity-0"
                     title="Copy LaTeX"
                 >

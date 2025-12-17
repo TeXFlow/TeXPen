@@ -13,6 +13,8 @@ export interface AppContextType {
     latex: string;
     setLatex: (latex: string) => void;
     candidates: Candidate[];
+    paragraphResult: string;
+    setParagraphResult: (text: string) => void;
     loadedStrokes?: Stroke[] | null;
     infer: (canvas: HTMLCanvasElement, options?: { onPreprocess?: (debugImage: string) => void }) => Promise<{ latex: string; candidates: Candidate[] } | null>;
     inferFromUrl: (url: string, options?: { onPreprocess?: (debugImage: string) => void }) => Promise<{ latex: string; candidates: Candidate[] } | null>;
@@ -79,7 +81,10 @@ export interface AppContextType {
     setShowUploadResult: (show: boolean) => void;
 
     // Inference State
+    // Inference State
     activeInferenceTab?: 'draw' | 'upload' | null;
+    inferenceMode: 'formula' | 'paragraph';
+    setInferenceMode: (mode: 'formula' | 'paragraph') => void;
 
     // Custom Notification
     customNotification: { message: string; progress?: number; isLoading?: boolean } | null;

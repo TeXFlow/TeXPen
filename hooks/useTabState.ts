@@ -13,6 +13,8 @@ export interface TabState {
   uploadPreview: string | null;
   showUploadResult: boolean;
   loadedStrokes: Stroke[] | null;
+  paragraphResult: string;
+  inferenceMode: 'formula' | 'paragraph';
 }
 
 const initialTabState: TabState = {
@@ -22,7 +24,9 @@ const initialTabState: TabState = {
   debugImage: null,
   uploadPreview: null,
   showUploadResult: false,
-  loadedStrokes: null
+  loadedStrokes: null,
+  paragraphResult: '',
+  inferenceMode: 'formula'
 };
 
 /**
@@ -42,6 +46,8 @@ export function useTabState(activeTab: 'draw' | 'upload') {
   const selectedIndex = currentState.selectedIndex;
   const debugImage = currentState.debugImage;
   const loadedStrokes = drawState.loadedStrokes; // Always from draw state
+  const paragraphResult = currentState.paragraphResult;
+  const inferenceMode = currentState.inferenceMode;
 
   // Upload specific (always from uploadState for persistence)
   const uploadPreview = uploadState.uploadPreview;
@@ -72,6 +78,14 @@ export function useTabState(activeTab: 'draw' | 'upload') {
     setUploadState(prev => ({ ...prev, showUploadResult: show }));
   };
 
+  const setParagraphResult = (val: string) => {
+    setCurrentState(prev => ({ ...prev, paragraphResult: val }));
+  };
+
+  const setInferenceMode = (mode: 'formula' | 'paragraph') => {
+    setCurrentState(prev => ({ ...prev, inferenceMode: mode }));
+  };
+
   const clearTabState = () => {
     setCurrentState(initialTabState);
   };
@@ -84,6 +98,15 @@ export function useTabState(activeTab: 'draw' | 'upload') {
       candidates: result.candidates,
       selectedIndex: 0,
       debugImage: result.debugImage
+    }));
+  };
+
+  // Update draw state with paragraph result
+  const updateDrawParagraphResult = (result: { markdown: string; debugImage?: string }) => {
+    setDrawState(prev => ({
+      ...prev,
+      paragraphResult: result.markdown,
+      debugImage: result.debugImage || prev.debugImage
     }));
   };
 
@@ -107,7 +130,9 @@ export function useTabState(activeTab: 'draw' | 'upload') {
       debugImage: null,
       uploadPreview: null,
       showUploadResult: false,
-      loadedStrokes: strokes
+      loadedStrokes: strokes,
+      paragraphResult: '',
+      inferenceMode: 'formula'
     });
   };
 
@@ -172,5 +197,10 @@ export function useTabState(activeTab: 'draw' | 'upload') {
     endDrawInference,
     startUploadInference,
     endUploadInference,
+    paragraphResult,
+    setParagraphResult,
+    inferenceMode,
+    setInferenceMode,
+    updateDrawParagraphResult,
   };
 }

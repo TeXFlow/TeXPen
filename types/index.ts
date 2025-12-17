@@ -1,6 +1,9 @@
 // types.ts
 import { InferenceSession } from 'onnxruntime-web';
 
+// Re-export inference types
+export * from '../services/inference/types';
+
 export interface ModelConfig {
   encoderModelUrl: string;
   decoderModelUrl: string;

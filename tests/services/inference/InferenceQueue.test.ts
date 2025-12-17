@@ -34,7 +34,7 @@ describe("InferenceQueue", () => {
     const queue = new InferenceQueue(mockProcessor);
     const blob = new Blob(["test"], { type: "image/png" });
 
-    const result = await queue.infer(blob, { num_beams: 1 });
+    const result = await queue.infer(blob, { num_beams: 1 }) as InferenceResult;
 
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]).toBe("test");
@@ -85,7 +85,7 @@ describe("InferenceQueue", () => {
     expect(["Skipped", "Aborted"]).toContain((result1 as Error).message);
     expect(result2).toBeInstanceOf(Error);
     expect((result2 as Error).message).toBe("Skipped");
-    expect(result3.candidates[0]).toContain("result");
+    expect((result3 as InferenceResult).candidates[0]).toContain("result");
 
     await queue.dispose();
   });
@@ -137,7 +137,7 @@ describe("InferenceQueue", () => {
     expect(result1).toBeInstanceOf(Error);
     expect((result1 as Error).message).toBe("Aborted");
     expect(abortedCount).toBe(1);
-    expect(result2.candidates[0]).toBe("completed");
+    expect((result2 as InferenceResult).candidates[0]).toBe("completed");
 
     await queue.dispose();
   });

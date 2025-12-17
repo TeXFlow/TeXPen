@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ModelConfig, Candidate } from '../types';
+import { ModelConfig, Candidate, ParagraphInferenceResult } from '../types';
 import { inferenceService } from '../services/inference/InferenceService';
 
 import { MODEL_CONFIG, GENERATION_CONFIG } from '../services/inference/config';
@@ -7,23 +7,7 @@ import { MODEL_CONFIG, GENERATION_CONFIG } from '../services/inference/config';
 export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm' | null, customModelId: string = MODEL_CONFIG.ID) {
   // Sampling Defaults
   const [numCandidates, setNumCandidates] = useState<number>(GENERATION_CONFIG.NUM_BEAMS);
-  const [doSample, setDoSample] = useState(true); // Default to true for better UX with multiple candidates? Or stick to config? Sticking to hardcoded true for now as per original code logic or Config?
-  // Original was true. Config says false. Assuming original intent for hook defaults overrides global default if needed, 
-  // BUT goal is to use config. 
-  // Let's check GENERATION_CONFIG.DO_SAMPLE -> false.
-  // If I change this to false, behavior changes.
-  // User "Extract the ones in useInkModel.ts too".
-  // I should use GENERATION_CONFIG.DO_SAMPLE if I want true alignment.
-  // However, the hook had `true`.
-  // I will use `true` but note it, or maybe I should update config to true?
-  // Actually `useInkModel` had explicit defaults.
-  // Let's use `GENERATION_CONFIG.DEFAULT_DO_SAMPLE` if I added it... I didn't add it.
-  // I added DEFAULT_TEMPERATURE etc.
-  // Let's stick to extraction.
-
-  // Wait, I saw `DO_SAMPLE: false` in generation.ts.
-  // The hook has `useState(true)`.
-  // I should probably map these to new constants I added: DEFAULT_TEMPERATURE, etc.
+  const [doSample, setDoSample] = useState(true);
 
   const [temperature, setTemperature] = useState(GENERATION_CONFIG.DEFAULT_TEMPERATURE);
   const [topK, setTopK] = useState(GENERATION_CONFIG.DEFAULT_TOP_K);
@@ -51,7 +35,6 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
   const activeInferenceCount = useRef<number>(0);
   /* 
    * Queue management for inference requests that come in while model is loading
-   * Now includes options to preserve callbacks like onPreprocess
    */
   const pendingInferenceRef = useRef<{
     canvas: HTMLCanvasElement;
@@ -99,9 +82,6 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
         if (allCached) {
           setUserConfirmed(true);
         } else {
-          // Only reset userConfirmed if we are NOT in the initial load phase (to avoid annoying resets)
-          // But actually, if we switch to a mode that isn't cached, we DO want to ask confirmation again?
-          // Current logic: if cached, auto-confirm. If not, wait for confirm.
           setUserConfirmed(false);
         }
       } catch (error) {
@@ -123,7 +103,6 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
       if (!provider) return;
 
       try {
-        // Register quota error handler (e.g. Incognito fallback)
         const { downloadManager } = await import('../services/downloader/DownloadManager');
         downloadManager.setQuotaErrorHandler(async () => {
           return window.confirm(
@@ -159,7 +138,6 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
         }
       } catch (error) {
         if (isCancelled) return;
-        // Check if aborted by user
         if (error instanceof Error && error.message.includes('aborted by user')) {
           console.log('Model loading aborted by user.');
           setStatus('idle');
@@ -195,16 +173,13 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
 
 
   const infer = useCallback(async (canvas: HTMLCanvasElement, options?: { onPreprocess?: (debugImage: string) => void }) => {
-    // Prevent inference if model is loading or not confirmed
     if (status === 'loading') {
       console.log('Inference queued: Model is currently loading.');
 
       if (pendingInferenceRef.current) {
-        // Cancel previous queued inference
         pendingInferenceRef.current.resolve(null);
       }
 
-      // Update UI immediately
       setIsGenerationQueued(true);
 
       return new Promise<{ latex: string; candidates: Candidate[]; debugImage: string | null } | null>((resolve, reject) => {
@@ -221,22 +196,14 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
     setIsInferencing(true);
     setStatus('inferencing');
 
-
-
-    // Debounce Logic
-
     return new Promise<{ latex: string; candidates: Candidate[]; debugImage: string | null } | null>((resolve, reject) => {
-      // Clear any existing debounce timer and resolve its promise as null (skipped)
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current.timer);
         debounceTimeoutRef.current.resolve(null);
-        // Since we are cancelling the previous one effectively before it started (in the debounce phase),
-        // we must decrement the counter that was incremented for it.
         activeInferenceCount.current -= 1;
       }
 
       const timer = setTimeout(() => {
-        // Clear the ref as we are now executing
         debounceTimeoutRef.current = null;
 
         canvas.toBlob(async (blob) => {
@@ -256,7 +223,6 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
               onPreprocess: options?.onPreprocess,
             });
             if (res) {
-              // Map string candidates to Candidate objects
               const newCandidates = res.candidates.map((latex, index) => ({
                 id: index,
                 latex: latex
@@ -265,7 +231,6 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
               setStatus('success');
               resolve({ latex: res.latex, candidates: newCandidates, debugImage: res.debugImage });
             } else {
-              // If result is null (skipped), we resolve null
               resolve(null);
             }
           } catch (e: unknown) {
@@ -285,18 +250,13 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
             }
           }
         }, 'image/png');
-      }, 100); // 100ms debounce
+      }, 100);
 
       debounceTimeoutRef.current = { timer, resolve };
     });
   }, [numCandidates, doSample, temperature, topK, topP, status, userConfirmed, isLoadedFromCache]);
 
   const inferFromUrl = useCallback(async (url: string, options?: { onPreprocess?: (debugImage: string) => void }) => {
-    // if (status === 'loading') {
-    //   console.warn('Inference skipped: Model is currently loading.');
-    //   return null;
-    // }
-
     try {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -324,6 +284,44 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
     }
   }, [infer]);
 
+  const inferParagraph = useCallback(async (canvas: HTMLCanvasElement, options?: { onPreprocess?: (debugImage: string) => void }) => {
+    if (status === 'loading') {
+      console.log('Inference queued: Model is currently loading.');
+      return null;
+    }
+
+    if (!userConfirmed && !isLoadedFromCache) {
+      console.warn('Inference skipped: User has not confirmed model download.');
+      return null;
+    }
+
+    setIsInferencing(true);
+    setStatus('inferencing');
+
+    return new Promise<ParagraphInferenceResult | null>((resolve, reject) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setIsInferencing(false);
+          setStatus('error');
+          return reject(new Error('Failed to create blob'));
+        }
+        try {
+          const res = await inferenceService.inferParagraph(blob, {
+            onPreprocess: options?.onPreprocess
+          });
+          setStatus('success');
+          resolve(res);
+        } catch (e) {
+          console.error('Paragraph Inference error:', e);
+          setStatus('error');
+          reject(e);
+        } finally {
+          setIsInferencing(false);
+        }
+      });
+    });
+  }, [status, userConfirmed, isLoadedFromCache]);
+
   // Process queued inference when model becomes idle (loaded)
   useEffect(() => {
     if (status === 'idle' && pendingInferenceRef.current) {
@@ -342,6 +340,7 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
     status,
     infer,
     inferFromUrl,
+    inferParagraph,
     isInferencing,
     loadingPhase,
     numCandidates,

@@ -2,7 +2,16 @@ export const MODEL_CONFIG = {
   ID: 'Ji-Ha/TexTeller3-ONNX-dynamic',
   DEFAULT_PROVIDER: 'wasm',
 
-  // Model Specs
+  // Models
+  TEXT_DETECTOR_ID: 'Ji-Ha/TexTeller3-ONNX-dynamic',
+  TEXT_RECOGNIZER_ID: 'Ji-Ha/TexTeller3-ONNX-dynamic',
+
+  // Filenames
+  LATEX_DET_MODEL: 'onnx/detection.onnx',
+  TEXT_DET_MODEL: 'onnx/text_detector.onnx',
+  TEXT_REC_MODEL_ENCODER: 'onnx/text_recognizer_encoder.onnx',
+  TEXT_REC_MODEL_DECODER: 'onnx/text_recognizer_decoder_with_past.onnx',
+
   IMAGE_SIZE: 448,
   MEAN: [0.9545467],
   STD: [0.15394445],
@@ -27,5 +36,6 @@ export const MODEL_CONFIG = {
   CHECKSUMS: {
     'encoder_model.onnx': '5e19cbcea4a6e28c3c4a6e52aca380e2f6e59a463a8c0df8330927b97fdc5499',
     'decoder_with_past_model.onnx': '30bfb67fcfe25055c85c0421ca7b1da608730048bc72ff191c7394e66f780f94',
+    // Add checksums for new models if available/needed
   },
 } as const;

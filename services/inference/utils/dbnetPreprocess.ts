@@ -37,7 +37,7 @@ export async function preprocessDBNet(
 
   // Create canvas
   const canvas = new OffscreenCanvas(newW, newH);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error("Context failed");
 
   ctx.drawImage(bitmap, 0, 0, newW, newH);

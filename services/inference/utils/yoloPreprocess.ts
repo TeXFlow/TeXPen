@@ -24,7 +24,7 @@ export async function preprocessYolo(
 
   // 3. Draw to canvas with gray padding
   const canvas = new OffscreenCanvas(targetSize, targetSize);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error("Context failed");
 
   // YOLO Usually uses 114 or 128 as grey padding, or just 0 (black).

@@ -339,7 +339,9 @@ export class ParagraphInferenceEngine {
       return images.map(() => "Rec Model Not Loaded");
     }
 
-    return Promise.all(images.map(async (image) => {
+    const results: string[] = [];
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
       try {
         const tensor = await recPreprocess(image);
 
@@ -351,12 +353,13 @@ export class ParagraphInferenceEngine {
         const outputName = this.textRecSession!.outputNames[0];
         const output = sessRes[outputName];
 
-        return recPostprocess(output.data as Float32Array, output.dims as number[]);
+        results.push(recPostprocess(output.data as Float32Array, output.dims as number[]));
       } catch (e) {
-        console.error("Text Rec Error", e);
-        return "[Error]";
+        console.error(`Text Rec Error at index ${i}:`, e);
+        results.push("[Error]");
       }
-    }));
+    }
+    return results;
   }
 
   private combineResults(textBBoxes: BBox[], latexBBoxes: BBox[]): string {

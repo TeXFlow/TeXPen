@@ -20,6 +20,9 @@ export function recPostprocess(
   const seqLen = dims[1];
   const numClasses = dims[2];
 
+  // Diagnostic logging
+  // console.log(`Text Rec Output - SeqLen: ${seqLen}, NumClasses: ${numClasses}`);
+
   const charIndices: number[] = [];
 
   // ArgMax per time step
@@ -39,24 +42,19 @@ export function recPostprocess(
   }
 
   // CTC Decode: Drop repeats and blanks
-  // Blank index is usually last or 0. Need to check Paddle conversion.
-  // For standard PaddleOCR:
-  // The dict is length N.
-  // The model outputs N+1 classes.
-  // The blank token is usually at the end (index N).
-
-  // Ref: PaddleOCR defaults blank to last.
-  const blankIdx = numClasses - 1;
+  // In many PaddleOCR ONNX exports, the blank token is at index 0.
+  // The dictionary characters then occupy indices 1 to N.
+  const blankIdx = 0;
 
   let res = "";
   let lastIdx = -1;
 
   for (const idx of charIndices) {
     if (idx !== lastIdx && idx !== blankIdx) {
-      // Append char
-      // Be careful with vocab bounds
-      if (idx < vocab.length) {
-        res += vocab[idx];
+      // Since blank is at 0, the characters from vocab[0...N-1] are at idx 1...N
+      const vocabIdx = idx - 1;
+      if (vocabIdx >= 0 && vocabIdx < vocab.length) {
+        res += vocab[vocabIdx];
       }
     }
     lastIdx = idx;

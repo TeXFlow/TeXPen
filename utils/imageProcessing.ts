@@ -57,7 +57,9 @@ export function trimWhiteBorder(canvas: HTMLCanvasElement): HTMLCanvasElement {
   const trimmedCanvas = document.createElement('canvas');
   trimmedCanvas.width = cropWidth;
   trimmedCanvas.height = cropHeight;
-  const trimmedCtx = trimmedCanvas.getContext('2d');
+  const trimmedCtx = trimmedCanvas.width > 0 && trimmedCanvas.height > 0
+    ? trimmedCanvas.getContext('2d', { willReadFrequently: true })
+    : null;
   if (!trimmedCtx) return canvas;
 
   trimmedCtx.drawImage(canvas, minX, minY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
@@ -91,7 +93,7 @@ export function resizeAndPad(canvas: HTMLCanvasElement): HTMLCanvasElement {
   const paddedCanvas = document.createElement('canvas');
   paddedCanvas.width = targetSize;
   paddedCanvas.height = targetSize;
-  const ctx = paddedCanvas.getContext('2d');
+  const ctx = paddedCanvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
 
   // Fill with white background

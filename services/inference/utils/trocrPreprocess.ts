@@ -17,7 +17,7 @@ export async function preprocessTrOCR(
   const { width: w, height: h } = bitmap;
 
   const canvas = new OffscreenCanvas(targetW, targetH);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error("Context failed");
 
   // Resize (distorted or preserved?)

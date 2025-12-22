@@ -50,7 +50,7 @@ export async function sliceFromImage(imageBlob: Blob, bboxes: BBox[]): Promise<B
 
   // We can use a shared source canvas
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error("Could not get 2d context");
 
   ctx.drawImage(bitmap, 0, 0);
@@ -76,7 +76,7 @@ export async function sliceFromImage(imageBlob: Blob, bboxes: BBox[]): Promise<B
 
     // Put on new canvas to blobify
     const sliceCanvas = new OffscreenCanvas(w, h);
-    const sliceCtx = sliceCanvas.getContext('2d');
+    const sliceCtx = sliceCanvas.getContext('2d', { willReadFrequently: true });
     if (!sliceCtx) continue;
 
     sliceCtx.putImageData(region, 0, 0);

@@ -311,10 +311,16 @@ export function useInkModel(theme: 'light' | 'dark', provider: 'webgpu' | 'wasm'
           });
           setStatus('success');
           resolve(res);
-        } catch (e) {
-          console.error('Paragraph Inference error:', e);
-          setStatus('error');
-          reject(e);
+        } catch (e: unknown) {
+          const err = e as Error;
+          if (err.message === 'Aborted' || err.message === 'Skipped' || err.name === 'AbortError') {
+            console.log('Paragraph inference aborted/skipped:', err.message);
+            resolve(null);
+          } else {
+            console.error('Paragraph Inference error:', e);
+            setStatus('error');
+            reject(e);
+          }
         } finally {
           setIsInferencing(false);
         }

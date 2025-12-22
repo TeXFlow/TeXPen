@@ -87,7 +87,10 @@ export function useTabState(activeTab: 'draw' | 'upload') {
   };
 
   const clearTabState = () => {
-    setCurrentState(initialTabState);
+    setCurrentState(prev => ({
+      ...initialTabState,
+      inferenceMode: prev.inferenceMode
+    }));
   };
 
   // Update draw state with inference result
@@ -123,7 +126,7 @@ export function useTabState(activeTab: 'draw' | 'upload') {
 
   // Load from history item
   const loadDrawState = (latex: string, strokes: Stroke[] | null) => {
-    setDrawState({
+    setDrawState(prev => ({
       latex,
       candidates: [],
       selectedIndex: 0,
@@ -132,8 +135,8 @@ export function useTabState(activeTab: 'draw' | 'upload') {
       showUploadResult: false,
       loadedStrokes: strokes,
       paragraphResult: '',
-      inferenceMode: 'formula'
-    });
+      inferenceMode: prev.inferenceMode
+    }));
   };
 
   // Track which tab is performing inference

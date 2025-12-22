@@ -7,7 +7,9 @@
 // If the model is the multilingual one or specific english one, the dict changes.
 // Using a standard printable ascii set as a safe default for "English" models.
 // "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~!"#$%&'()*+,-./ "
-const DEFAULT_DICT = "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~!\"#$%&'()*+,-./ ";
+// Standard English Dict for PaddleOCR (95 keys + space)
+// Order: 0-9, a-z, A-Z, punctuation, space
+const DEFAULT_DICT = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ";
 
 export function recPostprocess(
   data: Float32Array,

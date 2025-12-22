@@ -87,7 +87,7 @@ export function dbnetPostprocess(
       }
 
       // Filter small blobs
-      if (pixelCount < 10) continue; // Noise filter
+      if (pixelCount < 50) continue; // Noise filter
 
       // Add Box
       const w = maxX - minX + 1;

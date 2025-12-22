@@ -60,6 +60,8 @@ export class ParagraphInferenceEngine {
     env.wasm.wasmPaths = "/";
     // Disable multi-threading to avoid "recursive Transpose" and "ceil()" errors in WASM backend
     env.wasm.numThreads = 1;
+    // Disable SIMD to prevent "using ceil() in shape computation is not yet supported for MaxPool"
+    env.wasm.simd = false;
 
     // Standard Session Options for Stability
     const sessionOptions: InferenceSession.SessionOptions = {
@@ -144,16 +146,15 @@ export class ParagraphInferenceEngine {
           const txtBuffer = await txtBlob.arrayBuffer();
 
           try {
+            // Force WASM with disabled optimization for this specific model to avoid ceil() error
             this.textDetSession = await InferenceSession.create(new Uint8Array(txtBuffer), {
               ...sessionOptions,
-              executionProviders: ['webgpu', 'wasm']
-            });
-          } catch (e) {
-            console.warn("WebGPU failed for text detection, falling back to wasm", e);
-            this.textDetSession = await InferenceSession.create(new Uint8Array(txtBuffer), {
-              ...sessionOptions,
+              graphOptimizationLevel: 'disabled', // Vital for fixing 'ceil() in shape computation' error
               executionProviders: ['wasm']
             });
+          } catch (e) {
+            console.warn("Text Detection Init Failed", e);
+            throw e;
           }
         } else {
           console.warn("Text detection model fetch failed or empty");
@@ -243,14 +244,13 @@ export class ParagraphInferenceEngine {
     textBBoxes.forEach((b, i) => b.content = textContents[i]);
 
     // 7. Recognize Latex
-    // Run Latex Rec Model (Formula Rec) on each slice
-    // We can use the existing 'infer' method of InferenceEngine, but we need batching or sequential
-    const latexContents = [];
-    for (const slice of latexSlices) {
-      const res = await this.latexRecEngine.infer(slice, options, signal);
-      latexContents.push(res.latex);
-    }
-    latexBBoxes.forEach((b, i) => b.content = latexContents[i]);
+    // Run Latex Rec Model (Formula Rec) on each slice in parallel
+    const latexResults = await Promise.all(
+      latexSlices.map(slice => this.latexRecEngine.infer(slice, options, signal))
+    );
+    latexResults.forEach((res, i) => {
+      latexBBoxes[i].content = res.latex;
+    });
 
     // 8. Combine & Format
     const resultMarkdown = this.combineResults(textBBoxes, latexBBoxes);
@@ -339,34 +339,24 @@ export class ParagraphInferenceEngine {
       return images.map(() => "Rec Model Not Loaded");
     }
 
-    const results: string[] = [];
-
-    for (const image of images) {
+    return Promise.all(images.map(async (image) => {
       try {
         const tensor = await recPreprocess(image);
 
         const feeds: Record<string, import("onnxruntime-web").Tensor> = {};
-        // Usually input name is 'x', 'images', 'input'
-        // We'll check inputNames[0]
-        const inputName = this.textRecSession.inputNames[0];
+        const inputName = this.textRecSession!.inputNames[0];
         feeds[inputName] = tensor;
 
-        const sessRes = await this.textRecSession.run(feeds);
-        const outputName = this.textRecSession.outputNames[0];
+        const sessRes = await this.textRecSession!.run(feeds);
+        const outputName = this.textRecSession!.outputNames[0];
         const output = sessRes[outputName];
 
-        // Postprocess
-        const text = recPostprocess(output.data as Float32Array, output.dims as number[]);
-        results.push(text);
-
-        // cleanup
-        // tensor.dispose(); // if dispose available or needed? ORT-web tensor isn't disposable in same way as TFJS
+        return recPostprocess(output.data as Float32Array, output.dims as number[]);
       } catch (e) {
         console.error("Text Rec Error", e);
-        results.push("[Error]");
+        return "[Error]";
       }
-    }
-    return results;
+    }));
   }
 
   private combineResults(textBBoxes: BBox[], latexBBoxes: BBox[]): string {

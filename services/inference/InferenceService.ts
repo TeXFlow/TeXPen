@@ -117,52 +117,57 @@ export class InferenceService {
     this.initWorker();
 
     const id = crypto.randomUUID();
+    let isAborted = false;
 
     return new Promise<void>((resolve) => {
-      // Note: We don't support aborting the worker mid-flight easily.
-      // If the queue skips a request, it just doesn't call this.
-      // If this is running, we let it finish.
-
-      const { onPreprocess, ...workerOptions } = req.options;
-
-      const cleanup = () => {
-        this.pendingRequests.delete(id);
+      const cleanupSignal = () => {
         signal.removeEventListener('abort', onAbort);
       };
 
       const onAbort = () => {
-        // Queue aborted this request
-        cleanup();
+        isAborted = true;
+        cleanupSignal();
+        // Reject the request immediately so the UI can respond
         req.reject(new Error("Aborted"));
-        resolve(); // Let the queue proceed
+        // Note: We do NOT call resolve() here. 
+        // We wait for the worker to respond to this ID before resolving,
+        // which ensures the next request in the queue doesn't start
+        // until the worker is actually free.
       };
 
       if (signal.aborted) {
         onAbort();
+        // Even if aborted, we must ensure we don't leave the queue hanging.
+        // But if it was aborted BEFORE we sent it, we can resolve immediately.
+        resolve();
         return;
       }
 
       signal.addEventListener('abort', onAbort);
 
-      // Register the ID so we can resolve the queue's request when worker replies
+      // Register the ID so we can resolve when worker replies
       this.pendingRequests.set(id, {
         resolve: (data) => {
-          cleanup();
-          // Success: Resolve the queue's request
-          // TypeScript might complain about resolve type mismatch if we don't cast or unify
-          req.resolve(data as any);
-          resolve();
+          this.pendingRequests.delete(id);
+          cleanupSignal();
+          if (!isAborted) {
+            req.resolve(data as any);
+          }
+          resolve(); // Resolve the processor promise to let queue move on
         },
         reject: (err) => {
-          cleanup();
-          req.reject(err);
-          resolve(); // We resolved the processor promise even if it failed, so queue can continue
+          this.pendingRequests.delete(id);
+          cleanupSignal();
+          if (!isAborted) {
+            req.reject(err);
+          }
+          resolve(); // Resolve the processor promise to let queue move on
         },
-        onPreprocess: onPreprocess,
-        // We don't need onProgress for inference usually
+        onPreprocess: req.options.onPreprocess,
       });
 
-      // Pass explicit debug flag so worker knows whether to generate debug image
+      const { onPreprocess, ...workerOptions } = req.options;
+
       const workerData = {
         blob: req.blob,
         options: workerOptions,

@@ -180,12 +180,11 @@ export class VLMInferenceEngine {
   // 3. LLM_GPU: LLM + Text Embed on GPU, Vision on CPU (Standard "Balanced", saves ~1.8GB VRAM)
   // 4. LLM_ONLY_GPU: LLM on GPU, Vision + Text Embed on CPU (Saves slightly more VRAM than #3)
   // 5. CPU_ONLY: Everything on CPU (Failsafe)
-  private strategies: ('ALL_GPU' | 'ALL_GPU_NO_EMBED' | 'LLM_GPU' | 'LLM_ONLY_GPU' | 'CPU_ONLY')[] =
-    ['ALL_GPU', 'ALL_GPU_NO_EMBED', 'LLM_GPU', 'LLM_ONLY_GPU', 'CPU_ONLY'];
+  private strategies: ('ALL_GPU' | 'CPU_ONLY')[] = ['ALL_GPU', 'CPU_ONLY'];
 
   private currentStrategyIndex = 0; // Default to ALL_GPU
 
-  public get currentStrategy(): 'ALL_GPU' | 'ALL_GPU_NO_EMBED' | 'LLM_GPU' | 'LLM_ONLY_GPU' | 'CPU_ONLY' {
+  public get currentStrategy(): 'ALL_GPU' | 'CPU_ONLY' {
     return this.strategies[this.currentStrategyIndex];
   }
 
@@ -359,19 +358,6 @@ export class VLMInferenceEngine {
       case 'ALL_GPU':
         // Everything GPU
         break;
-      case 'ALL_GPU_NO_EMBED':
-        // TextEmbed on CPU
-        textEmbedProviders = cpu;
-        break;
-      case 'LLM_GPU':
-        // Vision on CPU
-        visionProviders = cpu;
-        break;
-      case 'LLM_ONLY_GPU':
-        // Vision and TextEmbed on CPU
-        visionProviders = cpu;
-        textEmbedProviders = cpu;
-        break;
       case 'CPU_ONLY':
         visionProviders = cpu;
         textEmbedProviders = cpu;
@@ -427,13 +413,21 @@ export class VLMInferenceEngine {
   }
 
   public async runInference(imageBlob: Blob, prompt: string = "Describe this image.", onToken?: TokenCallback, signal?: AbortSignal): Promise<VLMInferenceResult> {
+    console.log(`[VLM] runInference started. Prompt: "${prompt}"`);
     const lock = this.getInferenceLock();
-    if (lock) throw new Error("Inference already in progress");
+    if (lock) {
+      console.warn("[VLM] Inference Lock Active. Aborting new request.");
+      throw new Error("Inference already in progress");
+    }
 
     this.inferenceInProgress = true;
     try {
-      return await this.executePipeline(imageBlob, prompt, onToken, signal);
+      console.time("[VLM] Total Inference Time");
+      const result = await this.executePipeline(imageBlob, prompt, onToken, signal);
+      console.timeEnd("[VLM] Total Inference Time");
+      return result;
     } catch (error) {
+      console.timeEnd("[VLM] Total Inference Time");
       if (error instanceof Error && error.message === "Aborted") {
         console.log("[VLM] Inference Aborted");
         throw error;
@@ -443,6 +437,7 @@ export class VLMInferenceEngine {
 
       // Check for fatal WASM/Environment errors
       if (err.message && (err.message.includes("Aborted()") || err.message.includes("valid external Instance"))) {
+        console.error("[VLM] Fatal WASM Error detected");
         throw new Error("FATAL_RELOAD_NEEDED");
       }
 
@@ -455,6 +450,7 @@ export class VLMInferenceEngine {
       throw error;
     } finally {
       this.inferenceInProgress = false;
+      console.log("[VLM] runInference finished.");
     }
   }
 
@@ -491,26 +487,32 @@ export class VLMInferenceEngine {
     const t0 = performance.now();
 
     // 1. Preprocess Image
+    console.log("[VLM] Stage 1: Preprocessing Image...");
     if (signal?.aborted) throw new Error("Aborted");
     const pixelValues = await preprocessPaddleVL(imageBlob);
+    console.log(`[VLM] Image Preprocessed. Shape: ${pixelValues.dims}`);
     timings['preprocess'] = performance.now() - t0;
 
     // 2. Vision Pipeline
+    console.log("[VLM] Stage 2: Vision Pipeline...");
     const t1 = performance.now();
 
     // Run Vision Pipeline
     // Sessions are already loaded (either GPU or CPU fallback)
     if (signal?.aborted) throw new Error("Aborted");
     const imageEmbeds = await this.runVisionPipeline(pixelValues);
+    console.log(`[VLM] Vision Pipeline complete. Embeds Shape: ${imageEmbeds.dims}`);
 
     timings['vision_encoder'] = performance.now() - t1;
 
     // 3. LLM Pipeline
+    console.log("[VLM] Stage 3: LLM Pipeline...");
     const t2 = performance.now();
 
     // Run LLM Pipeline
     if (signal?.aborted) throw new Error("Aborted");
     const markdown = await this.runLLMPipeline(imageEmbeds, prompt, onToken, signal);
+    console.log("[VLM] LLM Pipeline complete.");
 
     timings['generation'] = performance.now() - t2;
 
@@ -522,13 +524,22 @@ export class VLMInferenceEngine {
 
   private async runVisionPipeline(pixelValues: Tensor): Promise<Tensor> {
     // 1. Patch Embed
-    const patchRes = await this.patchEmbedSession!.run({ 'pixel_values': pixelValues });
+    if (!this.patchEmbedSession) throw new Error("patchEmbedSession is null");
+    console.log("[VLM] Vision: Running Patch Embed...");
+    const patchRes = await this.patchEmbedSession.run({ 'pixel_values': pixelValues });
     const patchFeatures = patchRes['patch_features'];
+    if (!patchFeatures) throw new Error("patch_features output is missing");
+    console.log(`[VLM] Vision: Patch Embed complete. Shape: ${patchFeatures.dims}`);
 
     // 2. Add Pos Embed (Still on CPU for now as it's a simple addition)
     // TODO: Move this to a WebGPU shader or custom op for true zero-copy
+    if (!this.posEmbed) throw new Error("posEmbed is missing");
+    console.log("[VLM] Vision: Adding Position Embeddings...");
     const patchData = patchFeatures.data as Float32Array;
-    const posData = this.posEmbed!.data as Float32Array;
+    if (!patchData) throw new Error("patchFeatures.data is null/undefined");
+    const posData = this.posEmbed.data as Float32Array;
+    if (!posData) throw new Error("posEmbed.data is null/undefined");
+
     const enrichedFeatures = new Float32Array(patchData.length);
     for (let i = 0; i < patchData.length; i++) {
       enrichedFeatures[i] = patchData[i] + posData[i % posData.length];
@@ -537,35 +548,48 @@ export class VLMInferenceEngine {
 
     // 3. Transformer & Projector with IO-Binding
     // We want the output of Transformer to stay on GPU for the Projector
-    const transRes = await this.visionTransformerSession!.run(
+    if (!this.visionTransformerSession) throw new Error("visionTransformerSession is null");
+    console.log("[VLM] Vision: Running Vision Transformer...");
+    const transRes = await this.visionTransformerSession.run(
       { 'inputs_embeds': enrichedTensor },
       { preferredOutputLocation: 'gpu-buffer' } as any
     );
     const lastHidden = transRes['last_hidden_state'];
+    if (!lastHidden) throw new Error("last_hidden_state output is missing");
+    console.log(`[VLM] Vision: Transformer complete. Shape: ${lastHidden.dims}`);
 
     // Projector runs on the GPU buffer directly
-    const projRes = await this.visionProjectorSession!.run(
+    if (!this.visionProjectorSession) throw new Error("visionProjectorSession is null");
+    console.log("[VLM] Vision: Running Projector...");
+    const projRes = await this.visionProjectorSession.run(
       { 'image_features': lastHidden },
       { preferredOutputLocation: 'gpu-buffer' } as any
     );
-    return projRes['projected_features'];
+    const projectedFeatures = projRes['projected_features'];
+    if (!projectedFeatures) throw new Error("projected_features output is missing");
+    console.log(`[VLM] Vision: Projector complete. Shape: ${projectedFeatures.dims}`);
+    return projectedFeatures;
   }
 
   private async runLLMPipeline(imageEmbeds: Tensor, prompt: string, onToken?: TokenCallback, signal?: AbortSignal): Promise<string> {
     // 3. Text Embedding & Concat with Prompt Template
     // Template: <s>User: <|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>{prompt}\nAssistant: 
+    console.log("[VLM] LLM: Tokenizing Prompt...");
     const fullPrompt = `<s>User: <|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>${prompt}\nAssistant: `;
     const { input_ids } = await this.tokenizer!(fullPrompt, { return_tensor: false, padding: false, truncation: true });
     const ids = input_ids as number[];
+    console.log(`[VLM] LLM: Tokenization complete. IDs: ${ids.length}`);
 
     // Identify placeholder ID to correctly splice image embeddings
     const placeholderRes = await this.tokenizer!("<|IMAGE_PLACEHOLDER|>", { return_tensor: false, add_special_tokens: false });
     const placeholderId = (placeholderRes.input_ids as number[])[0];
     const placeholderIdx = ids.indexOf(placeholderId);
 
+    console.log("[VLM] LLM: Embedding Text IDs...");
     const inputIdsTensor = new Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
     const textEmbedRes = await this.textEmbedSession!.run({ 'input_ids': inputIdsTensor });
     const textEmbeds = textEmbedRes['inputs_embeds'];
+    console.log(`[VLM] LLM: Text embeddings complete. Shape: ${textEmbeds.dims}`);
 
     const hiddenDim = imageEmbeds.dims[2];
     const imgLen = imageEmbeds.dims[1];
@@ -575,6 +599,7 @@ export class VLMInferenceEngine {
 
     if (placeholderIdx !== -1) {
       // Splice image embeddings into the placeholder position
+      console.log(`[VLM] LLM: Injected ${imgLen} image tokens at position ${placeholderIdx}.`);
       const txtData = await textEmbeds.getData() as Float32Array;
       const imgData = await imageEmbeds.getData() as Float32Array;
 
@@ -593,16 +618,16 @@ export class VLMInferenceEngine {
       combinedData.set(txtData.subarray(suffixStart), prefixCount + imgData.length);
 
       combinedEmbeds = new Tensor('float32', combinedData, [1, txtLen - 1 + imgLen, hiddenDim]);
-      console.log(`[VLM] Injected ${imgLen} image tokens at position ${placeholderIdx}. Sequence length: ${txtLen - 1 + imgLen}`);
+      console.log(`[VLM] LLM: Sequence length: ${txtLen - 1 + imgLen}`);
     } else {
       // Fallback: prepend if placeholder not found (shouldn't happen with our template)
+      console.warn("[VLM] Placeholder not found in prompt tokens, fallback to prepending.");
       const imgData = await imageEmbeds.getData() as Float32Array;
       const txtData = await textEmbeds.getData() as Float32Array;
       const combinedData = new Float32Array(imgData.length + txtData.length);
       combinedData.set(imgData);
       combinedData.set(txtData, imgData.length);
       combinedEmbeds = new Tensor('float32', combinedData, [1, imgLen + txtLen, hiddenDim]);
-      console.warn("[VLM] Placeholder not found in prompt tokens, fallback to prepending.");
     }
 
     // 4. Generation Loop
@@ -613,7 +638,10 @@ export class VLMInferenceEngine {
     console.log(`[VLM] Starting LLM Generation Loop. Input Tokens: ${combinedEmbeds.dims[1]}`);
 
     for (let i = 0; i < MAX_NEW_TOKENS; i++) {
-      if (signal?.aborted) throw new Error("Aborted");
+      if (signal?.aborted) {
+        console.log(`[VLM] Gen Loop: Aborted at step ${i}`);
+        throw new Error("Aborted");
+      }
 
       const seqLen = currentEmbeds.dims[1];
       const attentionMask = new Tensor('int64', new BigInt64Array(seqLen).fill(1n), [1, seqLen]);
@@ -633,11 +661,12 @@ export class VLMInferenceEngine {
       const nextId = argmax(lastLogits);
 
       const stepTime = performance.now() - stepT0;
-      if (i % 10 === 0) {
-        console.log(`[VLM] Gen Step ${i}: ${stepTime.toFixed(1)}ms. Token: ${nextId}`);
-      }
+      console.log(`[VLM] Gen Step ${i}: ${stepTime.toFixed(1)}ms. Token: ${nextId} (SeqLen: ${seqLen})`);
 
-      if (nextId === this.tokenizer!.eos_token_id) break;
+      if (nextId === this.tokenizer!.eos_token_id) {
+        console.log(`[VLM] Gen Loop: EOS reached at step ${i}`);
+        break;
+      }
       generatedIds.push(nextId);
 
       // Call streaming callback

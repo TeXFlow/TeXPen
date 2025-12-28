@@ -24,27 +24,11 @@ const forceReload = () => {
 };
 
 const determineNextStrategy = (currentIdx: number): number => {
-    const phase = sessionStorage.getItem("vlm_phase");
-    console.log(`[VLMDemo] Recovery Analysis: Crash at phase '${phase}', Current Strategy ${currentIdx}`);
-
-    if (phase === 'LOADING_LLM') {
-        // LLM failed on GPU. Must move LLM to CPU.
-        // Strategies 0-3 have LLM on GPU. Strategy 4 is CPU_ONLY.
-        console.log("-> Jump to CPU_ONLY (Index 4)");
-        return 4;
+    // With simplified strategies: 0 = ALL_GPU, 1 = CPU_ONLY
+    if (currentIdx === 0) {
+        console.log("-> Jump to CPU_ONLY (Index 1)");
+        return 1;
     }
-
-    if (phase === 'LOADING_VISION') {
-        // Vision failed, but LLM likely loaded ok (since it loads before Vision now).
-        // Try to keep LLM on GPU, but move Vision to CPU.
-        // Strategy 2 (LLM_GPU) does exactly this.
-        if (currentIdx < 2) {
-            console.log("-> Jump to LLM_GPU (Index 2)");
-            return 2;
-        }
-    }
-
-    // Default: Linear backoff
     return currentIdx + 1;
 };
 
@@ -170,7 +154,7 @@ export const VLMDemo: React.FC = () => {
                 const currentIdx = vlmEngine.getStrategyIndex();
                 const nextIdx = determineNextStrategy(currentIdx);
 
-                if (nextIdx > 4 || (nextIdx === 4 && currentIdx === 4)) {
+                if (nextIdx > 1 || (nextIdx === 1 && currentIdx === 1)) {
                     console.error("All strategies failed. Stopping auto-reload.");
                     setStatus("Critical Error: All recovery strategies failed.");
                     setLoading(false);
@@ -178,7 +162,8 @@ export const VLMDemo: React.FC = () => {
                 }
 
                 sessionStorage.setItem("vlm_next_strategy", nextIdx.toString());
-                forceReload();
+                console.warn("[VLMDemo] Auto-reload suppressed for debugging. Manual reload may be needed.");
+                // forceReload();
             }
         };
 
@@ -223,7 +208,7 @@ export const VLMDemo: React.FC = () => {
             const currentIdx = vlmEngine.getStrategyIndex();
             const nextIdx = determineNextStrategy(currentIdx);
 
-            if (nextIdx > 4 || (nextIdx === 4 && currentIdx === 4)) {
+            if (nextIdx > 1 || (nextIdx === 1 && currentIdx === 1)) {
                 console.error("All strategies failed. Stopping auto-reload.");
                 setStatus("Critical Error: All recovery strategies failed.");
                 // We don't reload here, just letting the error stay visible
@@ -245,14 +230,14 @@ export const VLMDemo: React.FC = () => {
 
             // Re-calc nextIdx just to check termination condition
             const nextIdx = determineNextStrategy(currentIdx);
-            if (nextIdx > 4 || (nextIdx === 4 && currentIdx === 4)) return;
+            if (nextIdx > 1 || (nextIdx === 1 && currentIdx === 1)) return;
 
             await Promise.race([saveState(), timeout]);
-            console.log("State save attempt finished (or timed out). Reloading.");
-            forceReload();
+            console.log("State save attempt finished (or timed out). Auto-reload suppressed for debugging.");
+            // forceReload();
         } catch (e) {
             console.error("Recovery logic failed", e);
-            forceReload(); // Last resort
+            // forceReload(); // Last resort
         }
     };
 
@@ -391,7 +376,7 @@ export const VLMDemo: React.FC = () => {
                             <div className="flex justify-between items-center mb-1">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">{status}</div>
                                 <div className="text-xs font-bold text-blue-600 uppercase">
-                                    Strategy: {vlmEngine.getStrategyIndex() + 1}/5
+                                    Strategy: {vlmEngine.getStrategyIndex() + 1}/2
                                 </div>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">

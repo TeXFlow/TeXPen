@@ -20,6 +20,7 @@ export const VLMDemo: React.FC = () => {
         // Init engine on mount (or first interaction)
         return () => {
             // cleanup if needed
+            vlmEngine.dispose();
         };
     }, []);
 

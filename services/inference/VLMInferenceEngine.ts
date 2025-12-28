@@ -57,135 +57,508 @@ export class VLMInferenceEngine {
   private posEmbed: Tensor | null = null;
 
   private initialized = false;
+  private loading = false;
+  private sizeCache: Partial<Record<keyof typeof MODEL_CONFIG.VLM_COMPONENTS, number>> = {};
+
+  private sessionOptions: InferenceSession.SessionOptions = {
+    executionProviders: ['webgpu', 'wasm'], // Use WebGPU if available
+    executionMode: 'sequential',
+    graphOptimizationLevel: 'all'
+  };
+
+  private async loadModel(
+    key: keyof typeof MODEL_CONFIG.VLM_COMPONENTS,
+    sessionProp?: 'patchEmbedSession' | 'visionTransformerSession' | 'visionProjectorSession' | 'textEmbedSession' | 'llmSession',
+    providers: string[] = ['wasm'],
+    onProgress?: (msg: string) => void
+  ) {
+    if (sessionProp && this[sessionProp]) return; // Already loaded
+
+    const filename = MODEL_CONFIG.VLM_COMPONENTS[key];
+    const origin = typeof window !== 'undefined' ? window.location.origin : self.location.origin;
+    const path = `${origin}/models/vlm/${filename}`;
+
+    if (onProgress) onProgress(`Loading ${key}...`);
+
+    try {
+      // Fetch model and potential external data
+      let [modelResp, dataResp] = await Promise.all([
+        fetch(path),
+        fetch(`${path}.data`).then(r => r.ok ? r : null).catch(() => null)
+      ]);
+
+      if (!modelResp.ok) throw new Error(`Failed to fetch ${filename}`);
+      let modelBuffer: ArrayBuffer | null = await modelResp.arrayBuffer();
+
+      let dataBuffer: ArrayBuffer | null = null;
+      if (dataResp && dataResp.ok) {
+        dataBuffer = await dataResp.arrayBuffer();
+      }
+
+      // Helper to create session with fallback
+      const createSession = async (providers: string[]): Promise<InferenceSession> => {
+        const options: InferenceSession.SessionOptions = {
+          ...this.sessionOptions,
+          executionProviders: providers
+        };
+
+        // Clone buffers for this attempt to avoid detachment issues if the attempt fails
+        // but the buffer was transferred/detached by ORT.
+        const modelBufferClone = modelBuffer!.slice(0);
+        let externalDataClone: { path: string, data: Uint8Array }[] | undefined;
+
+        if (dataBuffer) {
+          const dataBufferClone = dataBuffer.slice(0);
+          externalDataClone = [
+            {
+              path: `${filename}.data`,
+              data: new Uint8Array(dataBufferClone)
+            }
+          ];
+          options.externalData = externalDataClone;
+        }
+
+        return await InferenceSession.create(new Uint8Array(modelBufferClone), options);
+      };
+
+      try {
+        console.log(`[VLM] Attempting to load ${key} with providers: ${providers.join(',')}`);
+        const session = await createSession(providers);
+        this[sessionProp] = session;
+        console.log(`[VLM] Loaded ${key} on ${providers[0]}`); // Assumption: first is primary
+      } catch (gpuError) {
+        // If we tried GPU and failed, fallback to CPU
+        if (providers.includes('webgpu') || providers.includes('webgl')) {
+          console.warn(`[VLM] Failed to load ${key} on GPU. Falling back to CPU (wasm). Error:`, gpuError);
+
+          // Retry with fresh buffers (cloned inside createSession)
+          const session = await createSession(['wasm']);
+
+          this[sessionProp] = session;
+          console.log(`[VLM] Loaded ${key} on CPU (fallback)`);
+        } else {
+          throw gpuError; // Already CPU or other fatal error
+        }
+      }
+
+      // Cleanup to help GC (we don't need the originals anymore after all attempts)
+      modelBuffer = null;
+      dataBuffer = null;
+    } catch (e) {
+      console.error(`Failed to load ${filename}`, e);
+      throw e;
+    }
+  }
+
+  private async releaseSession(sessionProp: 'patchEmbedSession' | 'visionTransformerSession' | 'visionProjectorSession' | 'textEmbedSession' | 'llmSession') {
+    if (this[sessionProp]) {
+      try {
+        const session = this[sessionProp] as any;
+        if (session && typeof session.release === 'function') {
+          await session.release();
+        }
+      } catch (e) { console.warn(`Failed to release ${sessionProp}`, e); }
+      this[sessionProp] = null;
+
+      // Force wait for GC?
+      await new Promise(r => setTimeout(r, 50));
+    }
+  }
+
+  // Strategy definitions
+  private strategies: ('ALL_GPU' | 'BALANCED' | 'CPU_ONLY')[] = ['ALL_GPU', 'BALANCED', 'CPU_ONLY'];
+  private currentStrategyIndex = 0; // Default to ALL_GPU
+
+  private get currentStrategy(): 'ALL_GPU' | 'BALANCED' | 'CPU_ONLY' {
+    return this.strategies[this.currentStrategyIndex];
+  }
+
+  private async fetchContentLength(path: string): Promise<number | null> {
+    try {
+      const head = await fetch(path, { method: 'HEAD' });
+      if (head.ok) {
+        const len = head.headers.get('content-length');
+        if (len) return Number.parseInt(len, 10);
+      }
+    } catch {
+      // Ignore and try range request.
+    }
+
+    try {
+      const range = await fetch(path, { headers: { Range: 'bytes=0-0' } });
+      if (range.ok) {
+        const cr = range.headers.get('content-range');
+        if (cr) {
+          const total = cr.split('/')[1];
+          if (total) return Number.parseInt(total, 10);
+        }
+      }
+    } catch {
+      // Ignore, caller will use size hints.
+    }
+
+    return null;
+  }
+
+  private async getComponentSizeBytes(key: keyof typeof MODEL_CONFIG.VLM_COMPONENTS): Promise<number> {
+    if (this.sizeCache[key]) return this.sizeCache[key]!;
+
+    const filename = MODEL_CONFIG.VLM_COMPONENTS[key];
+    const origin = typeof window !== 'undefined' ? window.location.origin : self.location.origin;
+    const path = `${origin}/models/vlm/${filename}`;
+
+    const sizeHints: Record<string, number> = {
+      'vision_patch_embed.onnx': 564,
+      'vision_transformer.onnx': 2179125,
+      'vision_projector.onnx': 24047,
+      'text_embed.onnx': 313,
+      'llm.onnx': 2079423,
+      'pos_embed.npy': 3359360
+    };
+    const dataHints: Record<string, number> = {
+      'vision_patch_embed.onnx.data': 2775040,
+      'vision_transformer.onnx.data': 1647222784,
+      'vision_projector.onnx.data': 103874560,
+      'text_embed.onnx.data': 423624704,
+      'llm.onnx.data': 1443037184
+    };
+
+    let size = await this.fetchContentLength(path);
+    if (size === null) {
+      size = sizeHints[filename] ?? 64 * 1024 * 1024;
+    }
+
+    // Account for external data if present.
+    const dataPath = `${path}.data`;
+    const dataSize = await this.fetchContentLength(dataPath);
+    if (dataSize !== null) {
+      size += dataSize;
+    } else {
+      const dataHint = dataHints[`${filename}.data`];
+      if (dataHint) size += dataHint;
+    }
+
+    this.sizeCache[key] = size;
+    return size;
+  }
+
+  private estimateGpuBudgetBytes(adapter: GPUAdapter): number {
+    const maxStorage = adapter.limits.maxStorageBufferBindingSize || 0;
+    const maxBuffer = adapter.limits.maxBufferSize || 0;
+    const singleBufferLimit = Math.max(maxStorage, maxBuffer);
+
+    // Heuristic: treat per-buffer limit as a proxy for total usable VRAM.
+    if (singleBufferLimit >= 512 * 1024 * 1024) {
+      return Math.floor(singleBufferLimit);
+    }
+
+    return Math.floor(singleBufferLimit * 0.95);
+  }
+
+  private async buildStrategyPlan(): Promise<Array<{
+    name: 'ALL_GPU' | 'LLM_GPU' | 'VISION_GPU' | 'CPU_ONLY';
+    providers: {
+      VISION_PATCH_EMBED: string[];
+      VISION_TRANSFORMER: string[];
+      VISION_PROJECTOR: string[];
+      TEXT_EMBED: string[];
+      LLM: string[];
+    };
+  }>> {
+    if (typeof navigator === 'undefined') return [{
+      name: 'CPU_ONLY',
+      providers: {
+        VISION_PATCH_EMBED: ['wasm'],
+        VISION_TRANSFORMER: ['wasm'],
+        VISION_PROJECTOR: ['wasm'],
+        TEXT_EMBED: ['wasm'],
+        LLM: ['wasm']
+      }
+    }];
+
+    if (!('gpu' in navigator)) {
+      console.warn("[VLM] WebGPU not supported. Using CPU_ONLY.");
+      return [{
+        name: 'CPU_ONLY',
+        providers: {
+          VISION_PATCH_EMBED: ['wasm'],
+          VISION_TRANSFORMER: ['wasm'],
+          VISION_PROJECTOR: ['wasm'],
+          TEXT_EMBED: ['wasm'],
+          LLM: ['wasm']
+        }
+      }];
+    }
+
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) {
+      console.warn("[VLM] No WebGPU adapter found. Using CPU_ONLY.");
+      return [{
+        name: 'CPU_ONLY',
+        providers: {
+          VISION_PATCH_EMBED: ['wasm'],
+          VISION_TRANSFORMER: ['wasm'],
+          VISION_PROJECTOR: ['wasm'],
+          TEXT_EMBED: ['wasm'],
+          LLM: ['wasm']
+        }
+      }];
+    }
+
+    const gpuBudget = this.estimateGpuBudgetBytes(adapter);
+    const deviceMemory = (navigator as any).deviceMemory || 4;
+    console.log(`[VLM] Detected Resources: DeviceMemory ~${deviceMemory}GB, GPU budget ~${(gpuBudget / 1024 / 1024).toFixed(0)}MB`);
+
+
+
+
+    const strategies: Array<{
+      name: 'ALL_GPU' | 'LLM_GPU' | 'VISION_GPU' | 'CPU_ONLY';
+      providers: {
+        VISION_PATCH_EMBED: string[];
+        VISION_TRANSFORMER: string[];
+        VISION_PROJECTOR: string[];
+        TEXT_EMBED: string[];
+        LLM: string[];
+      };
+    }> = [];
+
+    // User requested aggressive loading: Try most powerful config first, fallback on error.
+    // 1. ALL_GPU (Best Performance)
+    strategies.push({
+      name: 'ALL_GPU',
+      providers: {
+        VISION_PATCH_EMBED: ['webgpu', 'wasm'],
+        VISION_TRANSFORMER: ['webgpu', 'wasm'],
+        VISION_PROJECTOR: ['webgpu', 'wasm'],
+        TEXT_EMBED: ['webgpu', 'wasm'],
+        LLM: ['webgpu', 'wasm']
+      }
+    });
+
+    // 2. LLM_GPU (Balanced: LLM is heaviest compute, Vision on CPU saves VRAM)
+    strategies.push({
+      name: 'LLM_GPU',
+      providers: {
+        VISION_PATCH_EMBED: ['wasm'],
+        VISION_TRANSFORMER: ['wasm'],
+        VISION_PROJECTOR: ['wasm'],
+        TEXT_EMBED: ['webgpu', 'wasm'],
+        LLM: ['webgpu', 'wasm']
+      }
+    });
+
+    // 3. CPU_ONLY (Universal Fallback)
+    strategies.push({
+      name: 'CPU_ONLY',
+      providers: {
+        VISION_PATCH_EMBED: ['wasm'],
+        VISION_TRANSFORMER: ['wasm'],
+        VISION_PROJECTOR: ['wasm'],
+        TEXT_EMBED: ['wasm'],
+        LLM: ['wasm']
+      }
+    });
+
+    return strategies;
+  }
 
   public async init(onProgress?: (status: string, progress?: number) => void) {
     if (this.initialized) return;
+    if (this.loading) {
+      console.warn("[VLM] Initialization already in progress...");
+      return;
+    }
 
-    const sessionOptions: InferenceSession.SessionOptions = {
-      executionProviders: ['wasm'], // Fallback to WASM for reliability
-      executionMode: 'sequential',
-      graphOptimizationLevel: 'all'
-    };
+    this.loading = true;
+    try {
+      // Ensure clean state before starting
+      await this.dispose();
 
-    const loadModel = async (key: keyof typeof MODEL_CONFIG.VLM_COMPONENTS, sessionProp: 'patchEmbedSession' | 'visionTransformerSession' | 'visionProjectorSession' | 'textEmbedSession' | 'llmSession') => {
-      const filename = MODEL_CONFIG.VLM_COMPONENTS[key];
+      // Simplify Init Logic: Just use current strategy
+      await this.initStrategy(null, onProgress);
+
+
+      if (onProgress) onProgress("Loading Tokenizer...", 90);
+      this.tokenizer = await AutoTokenizer.from_pretrained(MODEL_CONFIG.PADDLE_VL_ID);
+
+      // Load Pos Embed (small NPY)
+      const filename = MODEL_CONFIG.VLM_COMPONENTS.POS_EMBED;
       const origin = typeof window !== 'undefined' ? window.location.origin : self.location.origin;
       const path = `${origin}/models/vlm/${filename}`;
+      const response = await fetch(path);
+      const buffer = await response.arrayBuffer();
+      this.posEmbed = parseNpy(buffer);
 
-      if (onProgress) onProgress(`Loading ${key}...`, 0);
+      this.initialized = true;
+      if (onProgress) onProgress("Ready", 100);
+    } catch (e) {
+      console.error("[VLM] Fatal initialization error:", e);
+      throw e;
+    } finally {
+      this.loading = false;
+    }
+  }
 
-      try {
-        // Determine if it's NPY
-        if (filename.endsWith('.npy')) {
-          const response = await fetch(path);
-          const buffer = await response.arrayBuffer();
-          this.posEmbed = parseNpy(buffer);
-        } else {
-          // Fetch model and potential external data
-          const [modelResp, dataResp] = await Promise.all([
-            fetch(path),
-            fetch(`${path}.data`).then(r => r.ok ? r : null).catch(() => null)
-          ]);
+  private async initStrategy(
+    // We ignore the passed strategy argument now as we use internal state
+    _ignoredResultStrat?: any,
+    onProgress?: (status: string, progress?: number) => void
+  ) {
+    const strat = this.currentStrategy;
+    console.log(`[VLM] Initializing with Active Strategy: ${strat}`);
 
-          if (!modelResp.ok) throw new Error(`Failed to fetch ${filename}`);
-          const modelBuffer = await modelResp.arrayBuffer();
+    // Map strategy to providers
+    const isCpu = strat === 'CPU_ONLY';
+    const isBalanced = strat === 'BALANCED';
 
-          const options: InferenceSession.SessionOptions = { ...sessionOptions };
+    // Providers lists
+    const gpu = ['webgpu', 'wasm'];
+    const cpu = ['wasm'];
 
-          if (dataResp && dataResp.ok) {
-            const dataBuffer = await dataResp.arrayBuffer();
-            options.externalData = [
-              {
-                path: `${filename}.data`,
-                data: new Uint8Array(dataBuffer)
-              }
-            ];
-          }
+    // Balanced: Vision on GPU, LLM on CPU
+    // All GPU: All GPU
+    // CPU: All CPU
 
-          const session = await InferenceSession.create(new Uint8Array(modelBuffer), options);
-          this[sessionProp] = session;
-        }
-      } catch (e) {
-        console.error(`Failed to load ${filename}`, e);
-        throw e;
-      }
-    };
+    const visionProviders = isCpu ? cpu : gpu;
+    const llmProviders = (isCpu || isBalanced) ? cpu : gpu;
 
-    await Promise.all([
-      loadModel('VISION_PATCH_EMBED', 'patchEmbedSession'),
-      loadModel('VISION_TRANSFORMER', 'visionTransformerSession'),
-      loadModel('VISION_PROJECTOR', 'visionProjectorSession'),
-      loadModel('TEXT_EMBED', 'textEmbedSession'),
-      loadModel('LLM', 'llmSession')
-    ]);
+    // Load models sequentially
+    await this.loadModel('VISION_PATCH_EMBED', 'patchEmbedSession', visionProviders, onProgress);
+    await new Promise(r => setTimeout(r, 50));
 
-    // Load pos_embed explicitly if not caught above (it is in VLM_COMPONENTS)
-    // Check tokenizer
-    if (onProgress) onProgress("Loading Tokenizer...", 90);
-    this.tokenizer = await AutoTokenizer.from_pretrained(MODEL_CONFIG.PADDLE_VL_ID);
+    await this.loadModel('VISION_TRANSFORMER', 'visionTransformerSession', visionProviders, onProgress);
+    await new Promise(r => setTimeout(r, 50));
 
-    this.initialized = true;
-    if (onProgress) onProgress("Ready", 100);
+    await this.loadModel('VISION_PROJECTOR', 'visionProjectorSession', visionProviders, onProgress);
+    await new Promise(r => setTimeout(r, 50));
+
+    await this.loadModel('TEXT_EMBED', 'textEmbedSession', llmProviders, onProgress);
+    await new Promise(r => setTimeout(r, 50));
+
+    await this.loadModel('LLM', 'llmSession', llmProviders, onProgress);
+    await new Promise(r => setTimeout(r, 50));
   }
 
   public async inferVLM(imageBlob: Blob, prompt: string = "Describe this image."): Promise<VLMInferenceResult> {
+    const MAX_RETRIES = 3;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await this.executePipeline(imageBlob, prompt);
+      } catch (error) {
+        console.error(`[VLM] Inference Attempt ${attempt + 1} Failed:`, error);
+
+        // Check if it's a recoverable GPU error
+        if (this.isGpuError(error as Error) && this.canDowngrade()) {
+          console.warn("[VLM] GPU OOM/Crash detected. Downgrading strategy and restarting...");
+
+          // 1. Downgrade
+          this.downgradeStrategy();
+
+          // 2. Dispose everything (Context likely dead)
+          await this.dispose();
+
+          // 3. Re-Init
+          // Note: We don't have the original progress callback here, logs will suffice.
+          console.log("[VLM] Re-initializing models...");
+          await this.init();
+
+          // 4. Retry loop will run execution again
+          continue;
+        }
+
+        throw error; // Not recoverable
+      }
+    }
+    throw new Error("Max retries exceeded");
+  }
+
+  private isGpuError(e: Error): boolean {
+    const msg = (e.message || "").toLowerCase();
+    return msg.includes("createbuffer") ||
+      msg.includes("out of memory") ||
+      msg.includes("context lost") ||
+      msg.includes("device lost") ||
+      msg.includes("too large");
+  }
+
+  private canDowngrade(): boolean {
+    return this.currentStrategyIndex < this.strategies.length - 1;
+  }
+
+  private downgradeStrategy() {
+    if (this.canDowngrade()) {
+      this.currentStrategyIndex++;
+      console.log(`[VLM] Downgraded to Strategy: ${this.currentStrategy}`);
+    }
+  }
+
+  private async executePipeline(imageBlob: Blob, prompt: string): Promise<VLMInferenceResult> {
     if (!this.initialized) throw new Error("Engine not initialized");
 
     const timings: Record<string, number> = {};
-    const startTotal = performance.now();
+    const t0 = performance.now();
 
     // 1. Preprocess Image
-    const t0 = performance.now();
-    const pixelValues = await preprocessPaddleVL(imageBlob); // [1, 3, 378, 378]
+    const pixelValues = await preprocessPaddleVL(imageBlob);
     timings['preprocess'] = performance.now() - t0;
 
     // 2. Vision Pipeline
     const t1 = performance.now();
+
+    // Run Vision Pipeline
+    // Sessions are already loaded (either GPU or CPU fallback)
+    const imageEmbeds = await this.runVisionPipeline(pixelValues);
+
+    timings['vision_encoder'] = performance.now() - t1;
+
+    // 3. LLM Pipeline
+    const t2 = performance.now();
+
+    // Run LLM Pipeline
+    const markdown = await this.runLLMPipeline(imageEmbeds, prompt);
+
+    timings['generation'] = performance.now() - t2;
+
+    return {
+      markdown: paddleVLPostprocess(markdown),
+      timings
+    };
+  }
+
+  private async runVisionPipeline(pixelValues: Tensor): Promise<Tensor> {
     // Patch Embed
     const patchRes = await this.patchEmbedSession!.run({ 'pixel_values': pixelValues });
-    const patchFeatures = patchRes['patch_features']; // [1, 729, 1152]
+    const patchFeatures = patchRes['patch_features'];
 
-    // Add Pos Embed (Broadcasting addition in JS)
-    // posEmbed is [729, 1152]. patchFeatures is [1, 729, 1152].
-    // We can just loop and add.
+    // Add Pos Embed
     const patchData = patchFeatures.data as Float32Array;
     const posData = this.posEmbed!.data as Float32Array;
     const enrichedFeatures = new Float32Array(patchData.length);
-
     for (let i = 0; i < patchData.length; i++) {
-      // patchData is flattened. posData repeats every 729*1152? No, posData is exact match for inner dims.
-      // patchFeatures shape [1, 729, 1152]. size = 729*1152.
-      // posEmbed shape [729, 1152]. size = 729*1152.
       enrichedFeatures[i] = patchData[i] + posData[i % posData.length];
     }
     const enrichedTensor = new Tensor('float32', enrichedFeatures, [1, 729, 1152]);
 
     // Transformer
     const transRes = await this.visionTransformerSession!.run({ 'inputs_embeds': enrichedTensor });
-    const lastHidden = transRes['last_hidden_state']; // [1, 729, 1152]
+    const lastHidden = transRes['last_hidden_state'];
 
     // Projector
     const projRes = await this.visionProjectorSession!.run({ 'image_features': lastHidden });
-    const imageEmbeds = projRes['projected_features']; // [1, 729, hidden?]
-    timings['vision_encoder'] = performance.now() - t1;
+    return projRes['projected_features'];
+  }
 
+  private async runLLMPipeline(imageEmbeds: Tensor, prompt: string): Promise<string> {
     // 3. Text Embedding & Concat
-    // Tokenize Prompt
-    // "<img>" tokens? The convert script prepared LLM, but how do we feed image?
-    // Usually: <image_tokens> + <text_tokens>
-    // Qwen-VL: Uses special tokens.
-    // For this replication, we assume simplified concat: Image Embeds FIRST, then Text Embeds.
-    // We do NOT use input_ids for the image part, we pass inputs_embeds to LLM.
-
     const { input_ids } = await this.tokenizer!(prompt, { return_tensor: false, padding: true, truncation: true });
-    // Array of numbers
     const inputIdsTensor = new Tensor('int64', BigInt64Array.from((input_ids as number[]).map(BigInt)), [1, (input_ids as number[]).length]);
 
-    // Text Embed
     const textEmbedRes = await this.textEmbedSession!.run({ 'input_ids': inputIdsTensor });
-    const textEmbeds = textEmbedRes['inputs_embeds']; // [1, seq_len, hidden]
+    const textEmbeds = textEmbedRes['inputs_embeds'];
 
-    // Concat: Image [1, 729, H] + Text [1, S, H] -> [1, 729+S, H]
+    // Concat
     const imgData = imageEmbeds.data as Float32Array;
     const txtData = textEmbeds.data as Float32Array;
     const hiddenDim = imageEmbeds.dims[2];
@@ -197,66 +570,37 @@ export class VLMInferenceEngine {
     const combinedEmbeds = new Tensor('float32', combinedData, [1, imageEmbeds.dims[1] + textEmbeds.dims[1], hiddenDim]);
 
     // 4. Generation Loop
-    const t2 = performance.now();
-    const startLen = combinedEmbeds.dims[1];
-    let currentEmbeds = combinedEmbeds;
-
-    // Initial run (Pre-fill)
-    // "inputs_embeds"
-    // We need attention_mask and position_ids?
-    // convert_vlm.py exported with: inputs_embeds, attention_mask, position_ids.
-
-    const seqLen = currentEmbeds.dims[1];
+    const seqLen = combinedEmbeds.dims[1];
     const attentionMask = new Tensor('int64', new BigInt64Array(seqLen).fill(1n), [1, seqLen]);
     const positionIds = new Tensor('int64', BigInt64Array.from({ length: seqLen }, (_, i) => BigInt(i)), [1, seqLen]);
 
+    let currentEmbeds = combinedEmbeds;
     let feeds: Record<string, Tensor> = {
       'inputs_embeds': currentEmbeds,
       'attention_mask': attentionMask,
       'position_ids': positionIds
     };
 
-    // We need KV cache support?
-    // The export script `convert_llm` used:
-    // wrapper forward(inputs_embeds, attention_mask, position_ids)
-    // It DOES NOT seemingly export past_key_values in inputs?
-    // Line 148: use_cache=False !!!
-    // If use_cache=False, we cannot do efficient autoregression. We must re-feed everything.
-    // This is slow (quadratic) but stateless and easier to implement for first static demo.
-    // Since I blindly fixed the script, I kept use_cache=False.
-    // So I must concat new token embed to input each step.
-
     const generatedIds: number[] = [];
     const MAX_NEW_TOKENS = 128;
-    let pastIds = input_ids as number[];
+    // let pastIds = input_ids as number[]; // unused now
 
     // Initial run
     const res = await this.llmSession!.run(feeds);
-    let logits = res['logits']; // [1, seq, vocab]
-
-    // Greedy decode last token
-    let lastParams = logits.dims[1] * logits.dims[2];
+    let logits = res['logits'];
     let lastLogits = (logits.data as Float32Array).slice(logits.data.length - logits.dims[2]);
     let nextId = argmax(lastLogits);
     generatedIds.push(nextId);
-    pastIds.push(nextId);
+    // pastIds.push(nextId);
 
     // Loop
     for (let i = 0; i < MAX_NEW_TOKENS; i++) {
-      // Embed nextId
+      // Optimization: If user cancels or something, we should break. 
+      // But for now just standard loop.
       const nextIdTensor = new Tensor('int64', BigInt64Array.from([BigInt(nextId)]), [1, 1]);
       const nextEmbedRes = await this.textEmbedSession!.run({ 'input_ids': nextIdTensor });
-      const nextEmbed = nextEmbedRes['inputs_embeds']; // [1, 1, H]
+      const nextEmbed = nextEmbedRes['inputs_embeds'];
 
-      // Append to currentEmbeds?
-      // Or re-run whole sequence?
-      // If model has no cache, we might need to pass WHOLE sequence embeddings?
-      // Or does it support partial forward if we don't mask?
-      // Without cache, standard attention attends to all provided inputs.
-      // So we must provide ALL inputs every time.
-
-      // Re-assemble full embeddings
-      // This is expensive. We re-allocate and copy.
       const oldData = currentEmbeds.data as Float32Array;
       const newData = nextEmbed.data as Float32Array;
       const totalLen = oldData.length + newData.length;
@@ -266,10 +610,9 @@ export class VLMInferenceEngine {
 
       currentEmbeds = new Tensor('float32', fullData, [1, currentEmbeds.dims[1] + 1, hiddenDim]);
 
-      // Update mask/pos
       const newSeqLen = currentEmbeds.dims[1];
       const newMask = new Tensor('int64', new BigInt64Array(newSeqLen).fill(1n), [1, newSeqLen]);
-      const newPos = new Tensor('int64', BigInt64Array.from({ length: newSeqLen }, (_, i) => BigInt(i)), [1, newSeqLen]); // 0 to N-1
+      const newPos = new Tensor('int64', BigInt64Array.from({ length: newSeqLen }, (_, i) => BigInt(i)), [1, newSeqLen]);
 
       feeds = {
         'inputs_embeds': currentEmbeds,
@@ -277,10 +620,7 @@ export class VLMInferenceEngine {
         'position_ids': newPos
       };
 
-      const stepH = performance.now();
       const stepRes = await this.llmSession!.run(feeds);
-      // console.log(`Step ${i} took ${performance.now() - stepH}ms`);
-
       logits = stepRes['logits'];
       lastLogits = (logits.data as Float32Array).slice(logits.data.length - logits.dims[2]);
       nextId = argmax(lastLogits);
@@ -288,13 +628,17 @@ export class VLMInferenceEngine {
       if (nextId === this.tokenizer!.eos_token_id) break;
       generatedIds.push(nextId);
     }
-    timings['generation'] = performance.now() - t2;
 
-    const markdown = this.tokenizer!.decode(generatedIds, { skip_special_tokens: true });
-
-    return {
-      markdown: paddleVLPostprocess(markdown),
-      timings
-    };
+    return this.tokenizer!.decode(generatedIds, { skip_special_tokens: true });
+  }
+  public async dispose() {
+    await this.releaseSession('patchEmbedSession');
+    await this.releaseSession('visionTransformerSession');
+    await this.releaseSession('visionProjectorSession');
+    await this.releaseSession('textEmbedSession');
+    await this.releaseSession('llmSession');
+    this.initialized = false;
+    this.posEmbed = null;
+    this.tokenizer = null;
   }
 }

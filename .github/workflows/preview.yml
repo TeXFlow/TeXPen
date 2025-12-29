@@ -1,0 +1,51 @@
+name: Preview Deploy
+
+on:
+  push:
+    branches-ignore:
+      - main
+    tags-ignore:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Get branch name
+        id: branch
+        run: echo "name=${GITHUB_REF_NAME//\//-}" >> $GITHUB_OUTPUT
+
+      - name: Deploy to GitHub Pages (Preview)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ${{ steps.branch.outputs.name }}
+          keep_files: true
+          commit_message: "Deploy preview for branch ${{ github.ref_name }} [skip ci]"
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Add job summary
+        run: |
+          echo "## Preview Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "The preview for branch **${{ github.ref_name }}** has been deployed." >> $GITHUB_STEP_SUMMARY
+          echo "URL: https://TeXFlow.github.io/TeXPen/${{ steps.branch.outputs.name }}/" >> $GITHUB_STEP_SUMMARY

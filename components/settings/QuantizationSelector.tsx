@@ -161,7 +161,7 @@ export function QuantizationSelector() {
                     {/* Information Box */}
                     <div className="p-2 rounded bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-600 dark:text-blue-300">
                         <p className="font-semibold mb-0.5">Note:</p>
-                        The FP16 decoder has been removed as it offered negligible performance benefits over FP32 while being slower than Int8.
+                        The FP16 decoder has been removed as it is slower than FP32 with marginal memory savings on GPU, and significantly slower on CPU due to lack of native support.
                     </div>
 
                     {/* Encoder */}

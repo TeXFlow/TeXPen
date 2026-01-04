@@ -6,6 +6,8 @@ import { Quantization, PerformanceProfile, QUANTIZATION_OPTIONS, PROFILE_OPTIONS
 import { Tooltip } from '../common/Tooltip';
 import { HelpIcon } from '../common/HelpIcon';
 
+import { MODEL_CONFIG } from '../../services/inference/config';
+
 export function QuantizationSelector() {
     const { theme } = useThemeContext();
     const {
@@ -91,6 +93,33 @@ export function QuantizationSelector() {
     const selectedEncoder = QUANTIZATION_OPTIONS.find(q => q.value === encoderQuantization);
     const selectedDecoder = QUANTIZATION_OPTIONS.find(q => q.value === decoderQuantization);
 
+    // Calculate estimated size
+    const getEncoderSize = (q: Quantization) => {
+        switch (q) {
+            case 'fp32': return MODEL_CONFIG.FILE_SIZES['encoder_model.onnx'];
+            case 'fp16': return MODEL_CONFIG.FILE_SIZES['encoder_model_fp16.onnx'];
+            case 'int8': return MODEL_CONFIG.FILE_SIZES['encoder_model_int8.onnx'];
+            case 'int4': return MODEL_CONFIG.FILE_SIZES['encoder_model_int4.onnx'];
+            default: return 0;
+        }
+    };
+
+    const getDecoderSize = (q: Quantization) => {
+        switch (q) {
+            case 'fp32': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged.onnx']; // Defaulting to merged
+            case 'fp16': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged.onnx']; // FP16 uses FP32 decoder in this config map usually
+            case 'int8': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged_int8.onnx'];
+            case 'int4': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged_int4.onnx'];
+            default: return 0;
+        }
+    };
+
+    const totalSize = (
+        getEncoderSize(encoderQuantization) +
+        getDecoderSize(decoderQuantization)
+    );
+    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(0);
+
     return (
         <div className="flex flex-col gap-3">
             {/* Main Profile Selector */}
@@ -129,6 +158,13 @@ export function QuantizationSelector() {
                         );
                     }}
                 />
+
+                {/* Size Estimate */}
+                <div className="flex justify-end mt-1">
+                    <span className="text-[10px] text-slate-400 dark:text-white/30">
+                        Est. Download: ~{totalSizeMB} MB
+                    </span>
+                </div>
             </div>
 
             {/* Advanced Toggle */}

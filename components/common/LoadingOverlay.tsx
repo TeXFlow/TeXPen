@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { useVerifyDownloads } from '../../hooks/useVerifyDownloads';
+import { MODEL_CONFIG } from '../../services/inference/config';
+import { Quantization } from '../../services/inference/types';
 
 interface LoadingOverlayProps {
     isDismissed: boolean;
@@ -14,6 +16,8 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ isDismissed, onDismiss 
         setUserConfirmed,
         isLoadedFromCache,
         openSettings,
+        encoderQuantization,
+        decoderQuantization
     } = useAppContext();
 
     const { verifyDownloads } = useVerifyDownloads();
@@ -28,8 +32,32 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ isDismissed, onDismiss 
 
     const onConfirm = () => setUserConfirmed(true);
 
-    // Since quantization was removed, we only use FP32 models
-    const downloadSize = '~1.2GB';
+    // Calculate estimated size
+    const getEncoderSize = (q: Quantization) => {
+        switch (q) {
+            case 'fp32': return MODEL_CONFIG.FILE_SIZES['encoder_model.onnx'];
+            case 'fp16': return MODEL_CONFIG.FILE_SIZES['encoder_model_fp16.onnx'];
+            case 'int8': return MODEL_CONFIG.FILE_SIZES['encoder_model_int8.onnx'];
+            case 'int4': return MODEL_CONFIG.FILE_SIZES['encoder_model_int4.onnx'];
+            default: return 0;
+        }
+    };
+
+    const getDecoderSize = (q: Quantization) => {
+        switch (q) {
+            case 'fp32': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged.onnx'];
+            case 'fp16': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged.onnx'];
+            case 'int8': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged_int8.onnx'];
+            case 'int4': return MODEL_CONFIG.FILE_SIZES['decoder_model_merged_int4.onnx'];
+            default: return 0;
+        }
+    };
+
+    const totalSize = (
+        getEncoderSize(encoderQuantization) +
+        getDecoderSize(decoderQuantization)
+    );
+    const downloadSize = `~${(totalSize / (1024 * 1024)).toFixed(0)} MB`;
 
     // Only show full overlay for initial permission/confirmation or errors.
     // We NO LONGER show it for standard model loading (handled by Main.tsx toast).
@@ -116,5 +144,6 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ isDismissed, onDismiss 
         </div>
     );
 };
+
 
 export default LoadingOverlay;

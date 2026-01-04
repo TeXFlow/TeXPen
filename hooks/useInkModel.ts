@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ModelConfig, Candidate, Quantization } from '../types';
+import { ModelConfig, Candidate } from '../types';
+import { Quantization } from '../services/inference/types';
 import { inferenceService } from '../services/inference/InferenceService';
 
 import { MODEL_CONFIG, GENERATION_CONFIG } from '../services/inference/config';

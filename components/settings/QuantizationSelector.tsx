@@ -91,7 +91,9 @@ export function QuantizationSelector({ value, onChange }: QuantizationSelectorPr
     return (
         <Select
             value={selectedOption}
-            onChange={(option: { value: string, label: string } | null) => onChange(option?.value || '')}
+            onChange={(option: { value: Quantization; label: string } | null) => {
+                if (option) onChange(option.value);
+            }}
             options={options}
             isSearchable={false}
             styles={customStyles}

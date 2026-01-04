@@ -1,6 +1,7 @@
 // Imports cleaned up
 import { createContext, useContext } from 'react';
-import { ModelConfig, Candidate, HistoryItem, Quantization } from '../types';
+import { ModelConfig, Candidate, HistoryItem } from '../types';
+import { Quantization } from '../services/inference/types';
 import { Stroke } from '../types/canvas';
 
 export type Provider = 'webgpu' | 'wasm';

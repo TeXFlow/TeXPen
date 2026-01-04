@@ -16,8 +16,6 @@ export const SettingsMenu: React.FC = () => {
     const menuRef = useRef<HTMLDivElement>(null);
     const modelIdInputRef = useRef<HTMLInputElement>(null);
     const {
-        quantization,
-        setQuantization,
         encoderQuantization,
         setEncoderQuantization,
         decoderQuantization,

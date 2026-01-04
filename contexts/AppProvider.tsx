@@ -5,7 +5,8 @@ import { useThemeContext } from './ThemeContext';
 import { isWebGPUAvailable } from '../utils/env';
 import { MODEL_CONFIG } from '../services/inference/config';
 import { useTabState } from '../hooks/useTabState';
-import { HistoryItem, Quantization } from '../types';
+import { HistoryItem } from '../types';
+import { Quantization } from '../services/inference/types';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { theme } = useThemeContext();

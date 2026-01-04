@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppContext, AppContextType, Provider } from './AppContext';
 import { useInkModel } from '../hooks/useInkModel';
 import { useThemeContext } from './ThemeContext';
-import { isWebGPUAvailable } from '../utils/env';
+import { isWebGPUAvailable, getDefaultQuantization } from '../utils/env';
 import { MODEL_CONFIG } from '../services/inference/config';
 import { useTabState } from '../hooks/useTabState';
 import { HistoryItem } from '../types';
@@ -25,6 +25,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else {
                 setProvider('wasm');
             }
+        });
+
+        getDefaultQuantization().then(defaultQuant => {
+            console.log('[AppProvider] Default Quantization:', defaultQuant);
+            setQuantization(defaultQuant);
+            setEncoderQuantization(defaultQuant);
+            setDecoderQuantization(defaultQuant);
         });
     }, []);
 

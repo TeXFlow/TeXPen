@@ -1,4 +1,3 @@
-import { Tensor } from '@huggingface/transformers';
 import cv from '@techstark/opencv-js';
 
 // Constants for PaddleOCR
@@ -55,10 +54,7 @@ export async function resizeForDetection(
   resizeW = Math.max(Math.round(resizeW / 32) * 32, 32);
 
   // Recalculate ratio exactly based on the snapped dimensions to allow mapping back
-  const ratioH = resizeH / h;
-  const ratioW = resizeW / w;
-
-  // We store the ratio to map back detection boxes to original image
+  // Recalculate ratio exactly based on the snapped dimensions to allow mapping back
   // Typically we just use one ratio if aspect ratio is preserved, but snapping changes it slightly.
   // For simplicity, we return the primary scaling factor, but DBNet post-process usually handles restoration via the scale.
 
@@ -111,8 +107,8 @@ export function boxesFromBitmap(
   maskW: number,
   destWidth: number,
   destHeight: number,
-  boxThresh: number = DET_DB_BOX_THRESH,
-  unclipRatio: number = DET_DB_UNCLIP_RATIO
+  _boxThresh: number = DET_DB_BOX_THRESH,
+  _unclipRatio: number = DET_DB_UNCLIP_RATIO
 ): BoundingBox[] {
   const boxes: BoundingBox[] = [];
 
@@ -143,7 +139,7 @@ export function boxesFromBitmap(
 
     // 4. Get minAreaRect
     // box_points = cv2.boxPoints(rect).reshape((-1, 1, 2))
-    const minRect = cv.minAreaRect(contour);
+
 
     // 5. Unclip (expand) the polygon
     // Simplification: We will just use the minAreaRect for now, 
@@ -157,38 +153,7 @@ export function boxesFromBitmap(
     // offset = Clipper.offset(...)
 
     // Approximating unclip by scaling the rect
-    const expandedW = minRect.size.width * (1 + (unclipRatio * 0.1)); // Very rough approximation
-    const expandedH = minRect.size.height * (1 + (unclipRatio * 0.1));
-
-    // Manual 4 points computation from RotatedRect
-    // center (x,y), size (width, height), angle (degrees)
-    const angleRad = (minRect.angle * Math.PI) / 180;
-    const cosA = Math.cos(angleRad);
-    const sinA = Math.sin(angleRad);
-    const hW = minRect.size.width / 2;
-    const hH = minRect.size.height / 2;
-
-    // Unrotated corners relative to center
-    // bl: -hW, +hH
-    // tl: -hW, -hH
-    // tr: +hW, -hH
-    // br: +hW, +hH
-
-    const cx = minRect.center.x;
-    const cy = minRect.center.y;
-
-    const points2D: [number, number][] = [
-      [-hW, hH],
-      [-hW, -hH],
-      [hW, -hH],
-      [hW, hH]
-    ];
-
-    const points: [number, number][] = points2D.map(([px, py]) => {
-      const rotX = px * cosA - py * sinA;
-      const rotY = px * sinA + py * cosA;
-      return [cx + rotX, cy + rotY];
-    });
+    // offset = Clipper.offset(...)
 
     // This is bounding box on the MASK. Need to scale to DEST image.
     const scaleX = destWidth / maskW;

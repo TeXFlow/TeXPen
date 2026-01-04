@@ -6,13 +6,9 @@ import {
   ctcDecode,
   sortBoxes,
   OcrResult,
-  BoundingBox,
-  REC_IMG_H,
-  REC_IMG_W,
-  DET_LIMIT_SIDE_LEN
+  BoundingBox
 } from './PaddleUtils';
 import { PADDLE_MODEL_CONFIG, DEFAULT_REC_KEYS } from './ModelConfig';
-import cv from '@techstark/opencv-js';
 
 export interface ScanResult {
   layout: LayoutItem[];
@@ -264,7 +260,7 @@ export class PaddleOCREngine {
 
   private async inferDet(image: OffscreenCanvas): Promise<{ boxes: BoundingBox[] }> {
     // 1. Resize
-    const { canvas: resizedCanvas, ratio } = await resizeForDetection(image, PADDLE_MODEL_CONFIG.DET.LIMIT_SIDE_LEN);
+    const { canvas: resizedCanvas } = await resizeForDetection(image, PADDLE_MODEL_CONFIG.DET.LIMIT_SIDE_LEN);
     const w = resizedCanvas.width;
     const h = resizedCanvas.height;
 

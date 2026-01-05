@@ -18,7 +18,6 @@ export function QuantizationSelector() {
         decoderQuantization,
         setDecoderQuantization,
 
-        setQuantization,
         provider,
     } = useAppContext();
 
@@ -80,13 +79,13 @@ export function QuantizationSelector() {
     };
 
     const handleManualChange = (type: 'encoder' | 'decoder', val: Quantization) => {
-        if (type === 'encoder') setEncoderQuantization(val);
-        if (type === 'decoder') setDecoderQuantization(val);
-
-        // Changing simple quantization for legacy compatibility if needed, though mostly unused now
-        if (type === 'encoder') setQuantization(val);
-
-        setPerformanceProfile('custom');
+        if (type === 'encoder') {
+            setEncoderQuantization(val);
+        }
+        if (type === 'decoder') {
+            setDecoderQuantization(val);
+        }
+        // AppProvider now automatically switches to 'custom' profile when these are called
     };
 
     const selectedProfile = PROFILE_OPTIONS.find(p => p.value === performanceProfile);

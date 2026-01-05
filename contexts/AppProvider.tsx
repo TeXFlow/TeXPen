@@ -1,112 +1,269 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AppContext, AppContextType, Provider } from './AppContext';
 import { useInkModel } from '../hooks/useInkModel';
 import { useThemeContext } from './ThemeContext';
-import { isWebGPUAvailable, getDefaultProfile } from '../utils/env';
+import { getDeviceCapabilities } from '../utils/env';
 import { MODEL_CONFIG } from '../services/inference/config';
 import { useTabState } from '../hooks/useTabState';
 import { HistoryItem } from '../types';
 import { Quantization, PerformanceProfile } from '../services/inference/types';
 
+const STORAGE_KEY = 'texpen_settings_v1';
+
+interface SavedSettings {
+    provider: Provider;
+    performanceProfile: PerformanceProfile;
+    encQuantization?: Quantization;
+    decQuantization?: Quantization;
+    customModelId?: string;
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { theme } = useThemeContext();
-    const [provider, setProvider] = useState<Provider | null>(null);
-    const [quantization, setQuantization] = useState<Quantization>('int8');
-    const [performanceProfile, setPerformanceProfile] = useState<PerformanceProfile>('balanced');
-    const [encoderQuantization, setEncoderQuantization] = useState<Quantization>('int8');
-    const [decoderQuantization, setDecoderQuantization] = useState<Quantization>('int8');
-    const [customModelId, setCustomModelId] = useState<string>(MODEL_CONFIG.ID);
+
+    // Initial states with safe defaults
+    const [provider, setProviderState] = useState<Provider | null>(null);
+    const [performanceProfile, setPerformanceProfileState] = useState<PerformanceProfile>('balanced');
+    const [quantization, setQuantizationState] = useState<Quantization>('int8');
+    const [encoderQuantization, setEncoderQuantizationState] = useState<Quantization>('int8');
+    const [decoderQuantization, setDecoderQuantizationState] = useState<Quantization>('int8');
+    const [customModelId, setCustomModelIdState] = useState<string>(MODEL_CONFIG.ID);
+
+    // UI State
     const [activeTab, setActiveTab] = useState<'draw' | 'upload'>('draw');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return window.innerWidth >= 768;
+        }
+        return true;
+    });
+    const [showPreviewInput, setShowPreviewInput] = useState(false);
+    const [sessionId, setSessionId] = useState<string>(Date.now().toString());
 
-    useEffect(() => {
-        isWebGPUAvailable().then(available => {
-            console.log('[AppProvider] WebGPU Available:', available);
-            if (available) {
-                setProvider('webgpu');
+    // Settings State
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [settingsFocus, setSettingsFocus] = useState<'modelId' | null>(null);
+
+    // Notification & Dialog
+    const [customNotification, setCustomNotification] = useState<{ message: string; progress?: number; isLoading?: boolean } | null>(null);
+    const [dialogConfig, setDialogConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        confirmText?: string;
+        isDangerous?: boolean;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+    });
+
+
+    // Helper to resolve quantization from profile
+    const resolveQuantization = (profile: PerformanceProfile): { enc: Quantization, dec: Quantization } | null => {
+        switch (profile) {
+            case 'high_quality': return { enc: 'fp32', dec: 'fp32' };
+            case 'fast': return { enc: 'fp16', dec: 'fp32' };
+            case 'balanced': return { enc: 'int8', dec: 'int8' };
+            case 'low_memory': return { enc: 'int4', dec: 'int4' };
+            default: return null; // 'custom' or unknown
+        }
+    };
+
+    // Unified State Updater & Saver
+    const updateSettings = useCallback((
+        newProvider: Provider,
+        newProfile: PerformanceProfile,
+        customSettings?: { enc: Quantization, dec: Quantization, modelId?: string }
+    ) => {
+        setProviderState(newProvider);
+        setPerformanceProfileState(newProfile);
+
+        let enc: Quantization, dec: Quantization;
+
+        if (newProfile === 'custom' && customSettings) {
+            enc = customSettings.enc;
+            dec = customSettings.dec;
+        } else {
+            const resolved = resolveQuantization(newProfile);
+            if (resolved) {
+                enc = resolved.enc;
+                dec = resolved.dec;
             } else {
-                setProvider('wasm');
-            }
-        });
-
-        getDefaultProfile().then(defaultProfile => {
-            console.log('[AppProvider] Default Profile:', defaultProfile);
-            setPerformanceProfile(defaultProfile);
-        });
-    }, []);
-
-    // Auto-switch profile when provider changes to prevent invalid states
-    useEffect(() => {
-        if (!provider) return;
-
-        // If switching to WASM (CPU)
-        if (provider === 'wasm') {
-            // If current profile is not widely compatible or slow, switch to balanced
-            // Or if custom quantizations are FP16, we should probably reset/warn.
-            if (performanceProfile === 'fast' || performanceProfile === 'high_quality') {
-                console.log('[AppProvider] Switching to WASM: Resetting profile to Balanced');
-                setPerformanceProfile('balanced');
-            } else if (performanceProfile === 'custom') {
-                // Check if custom settings are invalid for CPU (e.g. FP16)
-                // This is harder since we don't want to override user intent if they really want it.
-                // But FP16 on CPU is explicitly "very very slow so it should not appear".
-                // Let's force reset to balanced if encoder is FP16.
-                if (encoderQuantization === 'fp16' || decoderQuantization === 'fp16') { // decoder FP16 is gone anyway but for safety
-                    console.log('[AppProvider] Switching to WASM: Custom profile has FP16, resetting to Balanced');
-                    setPerformanceProfile('balanced');
-                }
-            }
-        }
-        // If switching to WebGPU
-        else if (provider === 'webgpu') {
-            // If current profile is balanced/low_memory, should we switch to High Quality?
-            // User said: "default to Highest Quality" for GPU.
-            // If user previously selected balanced on GPU, maybe keep it?
-            // But they said "hide int8/int4 in GPU tab", implying they shouldn't even be there.
-            // So if we are on GPU and have an int8 profile, we MUST switch.
-            if (performanceProfile === 'balanced' || performanceProfile === 'low_memory') {
-                console.log('[AppProvider] Switching to WebGPU: Resetting profile to High Quality');
-                setPerformanceProfile('high_quality');
-            } else if (performanceProfile === 'custom') {
-                if (encoderQuantization === 'int8' || encoderQuantization === 'int4') {
-                    console.log('[AppProvider] Switching to WebGPU: Custom profile has Int8/4, resetting to High Quality');
-                    setPerformanceProfile('high_quality');
-                }
-            }
-        }
-    }, [provider, performanceProfile, encoderQuantization, decoderQuantization]);
-
-    // Effect to update quantizations based on performance profile
-    useEffect(() => {
-        if (performanceProfile === 'custom') return;
-
-        let enc: Quantization = 'int8';
-        let dec: Quantization = 'int8';
-
-        switch (performanceProfile) {
-            case 'high_quality':
-                enc = 'fp32';
-                dec = 'fp32';
-                break;
-            case 'fast':
-                enc = 'fp16';
-                dec = 'fp32';
-                break;
-            case 'balanced':
+                // Fallback / Maintain current if feasible
+                // Since this is inside a callback, we can't easily read current state 
+                // unless we use refs or pass it in. 
+                // For safety, default to balanced if undefined map.
                 enc = 'int8';
                 dec = 'int8';
-                break;
-            case 'low_memory':
-                enc = 'int4';
-                dec = 'int4';
-                break;
+            }
         }
 
-        console.log(`[AppProvider] Applying profile ${performanceProfile}: Enc=${enc}, Dec=${dec}`);
-        setQuantization(enc);
-        setEncoderQuantization(enc);
-        setDecoderQuantization(dec);
-    }, [performanceProfile]);
+        setQuantizationState(enc);
+        setEncoderQuantizationState(enc);
+        setDecoderQuantizationState(dec);
 
+        const newModelId = customSettings?.modelId || customModelId || MODEL_CONFIG.ID;
+        if (customSettings?.modelId) {
+            setCustomModelIdState(customSettings.modelId);
+        }
+
+        // Save to storage
+        try {
+            const settingsToSave: SavedSettings = {
+                provider: newProvider,
+                performanceProfile: newProfile,
+                encQuantization: enc,
+                decQuantization: dec,
+                customModelId: newModelId
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(settingsToSave));
+        } catch (e) {
+            console.error("Failed to save settings", e);
+        }
+
+    }, [customModelId]);
+
+    // Initialization Effect
+    useEffect(() => {
+        const init = async () => {
+            const caps = await getDeviceCapabilities();
+            const savedStr = localStorage.getItem(STORAGE_KEY);
+            let saved: SavedSettings | null = null;
+            if (savedStr) {
+                try { saved = JSON.parse(savedStr); } catch (e) { console.error("Failed to parse settings", e); }
+            }
+
+            let loadedProvider: Provider = saved?.provider || (caps.hasGPU ? 'webgpu' : 'wasm');
+
+            // Validate GPU availability
+            if (loadedProvider === 'webgpu' && !caps.hasGPU) {
+                console.log("[AppProvider] WebGPU preference found but not available, falling back to WASM");
+                loadedProvider = 'wasm';
+            } else {
+                console.log("[AppProvider] Initializing Provider:", loadedProvider);
+            }
+
+            // Determine Profile
+            let loadedProfile: PerformanceProfile = saved?.performanceProfile || (loadedProvider === 'webgpu' ? 'high_quality' : 'balanced');
+
+            // Resolve Quantization
+            let enc: Quantization = 'int8', dec: Quantization = 'int8';
+
+            if (loadedProfile === 'custom' && saved?.encQuantization) {
+                enc = saved.encQuantization;
+                dec = saved.decQuantization || 'int8';
+            } else {
+                const res = resolveQuantization(loadedProfile);
+                if (res) { enc = res.enc; dec = res.dec; }
+                else {
+                    // Fallback if profile invalid
+                    loadedProfile = 'balanced';
+                    enc = 'int8'; dec = 'int8';
+                }
+            }
+
+            const loadedModelId = saved?.customModelId || MODEL_CONFIG.ID;
+
+            // Apply all directly (first render will have defaults, then this updates)
+            setProviderState(loadedProvider);
+            setPerformanceProfileState(loadedProfile);
+            setQuantizationState(enc);
+            setEncoderQuantizationState(enc);
+            setDecoderQuantizationState(dec);
+            setCustomModelIdState(loadedModelId);
+        };
+
+        init();
+    }, []);
+
+    // Provider Setter Logic
+    const setProvider = (p: Provider) => {
+        // Optimization: if same, do nothing? 
+        // Be careful if other states need sync, but generally yes.
+        if (p === provider) return;
+
+        // Auto-switch logic
+        let newProfile = performanceProfile;
+
+        if (p === 'webgpu') {
+            // Upgrade to HQ if coming from balanced/low or if forced by logic
+            // User wants: "if user has GPU... load fp32... load that and also display that"
+            if (performanceProfile === 'balanced' || performanceProfile === 'low_memory') {
+                console.log('[AppProvider] Switching to WebGPU: Upgrading profile to High Quality');
+                newProfile = 'high_quality';
+            }
+        } else if (p === 'wasm') {
+            // "When you switch from WebGPU to WASM it shouldn't display int8 and the UI and yet load fp32."
+            // User requested NOT to force int8 if they have fp32 loaded/selected.
+            // So we keep the current profile (even if it's High Quality/fp32)
+            console.log('[AppProvider] Switching to WASM: Keeping current profile');
+        }
+
+        // Apply
+        if (newProfile === 'custom') {
+            updateSettings(p, newProfile, { enc: encoderQuantization, dec: decoderQuantization, modelId: customModelId });
+        } else {
+            updateSettings(p, newProfile, { enc: 'int8', dec: 'int8', modelId: customModelId }); // Enc/Dec ignored by updateSettings for non-custom, but passed for type safety if refactored
+        }
+    };
+
+    const setPerformanceProfile = (p: PerformanceProfile) => {
+        if (p === performanceProfile) return;
+        updateSettings(provider || 'wasm', p,
+            { enc: encoderQuantization, dec: decoderQuantization, modelId: customModelId }
+        );
+    };
+
+    // Granular Setters
+    const setQuantization = (q: Quantization) => {
+        // Changing simple quantization usually implies 'enc' and 'dec' 
+        // But in this app 'quantization' usually maps to encoder for display?
+        // Let's assume this updates both for simplicity if calling the top level setter?
+        // Or if we are in 'high_quality', this setter shouldn't be called?
+        // We will assume this switches to 'custom' profile.
+
+        updateSettings(provider || 'wasm', 'custom', {
+            enc: q,
+            dec: decoderQuantization === 'fp32' ? 'fp32' : q, // Try to keep decoder consistent? Or just update both?
+            // Actually usually 'setQuantization' implies overall.
+            // Let's update both to 'q' to be safe, or just encoder.
+            modelId: customModelId
+        });
+
+        // Wait, 'setQuantization' in original code updated 'quantization' state but NOT enc/dec state directly in the Effect 
+        // The effect (lines 106-107 original) updated enc/dec based on profile.
+        // But what if user manually sets quantization?
+        // We should treat it as 'custom'.
+    };
+
+    const setEncoderQuantization = (q: Quantization) => {
+        updateSettings(provider || 'wasm', 'custom', {
+            enc: q,
+            dec: decoderQuantization,
+            modelId: customModelId
+        });
+    };
+
+    const setDecoderQuantization = (q: Quantization) => {
+        updateSettings(provider || 'wasm', 'custom', {
+            enc: encoderQuantization,
+            dec: q,
+            modelId: customModelId
+        });
+    };
+
+    const setCustomModelId = (id: string) => {
+        updateSettings(provider || 'wasm', performanceProfile, {
+            enc: encoderQuantization,
+            dec: decoderQuantization,
+            modelId: id
+        });
+    };
+
+    // Hooks
     const {
         config,
         setConfig,
@@ -133,7 +290,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isGenerationQueued,
     } = useInkModel(theme, provider, quantization, encoderQuantization, decoderQuantization, customModelId);
 
-    // Use the extracted tab state hook
     const {
         latex,
         candidates,
@@ -160,19 +316,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         endUploadInference,
     } = useTabState(activeTab);
 
-    const clearModel = () => {
-        clearTabState();
-    };
+    // Methods
+    const clearModel = () => clearTabState();
 
-    // Wrappers for inference to update the correct state
     const infer = async (canvas: HTMLCanvasElement) => {
         startDrawInference();
-
         try {
             const result = await modelInfer(canvas, {
-                onPreprocess: (debugImage) => {
-                    setDrawState(prev => ({ ...prev, debugImage }));
-                }
+                onPreprocess: (img) => setDrawState(prev => ({ ...prev, debugImage: img }))
             });
             if (result) {
                 updateDrawResult(result);
@@ -186,12 +337,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const inferFromUrl = async (url: string) => {
         startUploadInference();
-
         try {
             const result = await modelInferFromUrl(url, {
-                onPreprocess: (debugImage) => {
-                    setUploadState(prev => ({ ...prev, debugImage }));
-                }
+                onPreprocess: (img) => setUploadState(prev => ({ ...prev, debugImage: img }))
             });
             if (result) {
                 updateUploadResult(result);
@@ -203,67 +351,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     };
 
-    const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return window.innerWidth >= 768;
-        }
-        return true;
-    });
-    const [showPreviewInput, setShowPreviewInput] = useState(false);
-    const [sessionId, setSessionId] = useState<string>(Date.now().toString());
-
-    // Settings State
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [settingsFocus, setSettingsFocus] = useState<'modelId' | null>(null);
-
-    // Custom Notification
-    const [customNotification, setCustomNotification] = useState<{ message: string; progress?: number; isLoading?: boolean } | null>(null);
-
-    // Dialog configuration
-    const [dialogConfig, setDialogConfig] = useState<{
-        isOpen: boolean;
-        title: string;
-        message: string;
-        onConfirm: () => void;
-        confirmText?: string;
-        isDangerous?: boolean;
-    }>({
-        isOpen: false,
-        title: '',
-        message: '',
-        onConfirm: () => { },
-    });
-
-    const openDialog = (config: {
-        title: string;
-        message: string;
-        onConfirm: () => void;
-        confirmText?: string;
-        isDangerous?: boolean;
-    }) => {
-        setDialogConfig({
-            isOpen: true,
-            ...config
-        });
+    // Dialog & UI logic
+    const openDialog = (cfg: { title: string; message: string; onConfirm: () => void; confirmText?: string; isDangerous?: boolean }) => {
+        setDialogConfig({ isOpen: true, ...cfg });
     };
-
-    const closeDialog = () => {
-        setDialogConfig(prev => ({ ...prev, isOpen: false }));
-    };
+    const closeDialog = () => setDialogConfig(prev => ({ ...prev, isOpen: false }));
 
     const openSettings = (focusTarget?: 'modelId') => {
         setIsSettingsOpen(true);
         setSettingsFocus(focusTarget || null);
     };
-
     const closeSettings = () => {
         setIsSettingsOpen(false);
         setSettingsFocus(null);
     };
 
-    const refreshSession = () => {
-        setSessionId(Date.now().toString());
-    };
+    const refreshSession = () => setSessionId(Date.now().toString());
 
     const loadFromHistory = (item: HistoryItem) => {
         loadDrawState(item.latex, item.strokes || null);
@@ -271,99 +374,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshSession();
     };
 
-    const toggleSidebar = () => {
-        setIsSidebarOpen(prev => !prev);
-    };
+    const toggleSidebar = () => setIsSidebarOpen(prev => !prev);
 
     const value: AppContextType = {
-        // InkModel
-        config,
-        setConfig,
-        status,
-        latex,
-        setLatex,
-        candidates,
-        loadedStrokes,
-        infer,
-        inferFromUrl,
-        clearModel,
-        loadingPhase,
-        isInferencing,
-        isGenerationQueued,
-        debugImage,
-        numCandidates,
-        setNumCandidates,
-        doSample,
-        setDoSample,
-        temperature,
-        setTemperature,
-        topK,
-        setTopK,
-        topP,
-        setTopP,
+        config, setConfig,
+        status, latex, setLatex, candidates, loadedStrokes,
+        infer, inferFromUrl, clearModel,
+        loadingPhase, isInferencing, isGenerationQueued, debugImage,
+        numCandidates, setNumCandidates, doSample, setDoSample,
+        temperature, setTemperature, topK, setTopK, topP, setTopP,
         provider: provider || 'wasm',
         setProvider,
-        quantization,
-        setQuantization,
-        encoderQuantization,
-        setEncoderQuantization,
-        decoderQuantization,
-        setDecoderQuantization,
-        performanceProfile,
-        setPerformanceProfile,
-        progress,
-        userConfirmed,
-        setUserConfirmed,
-        customModelId,
-        setCustomModelId,
-        isLoadedFromCache,
-        isInitialized,
-        showPreviewInput,
-        setShowPreviewInput,
-
-        // Settings
-        isSettingsOpen,
-        settingsFocus,
-        openSettings,
-        closeSettings,
-
-        // Sidebar
-        isSidebarOpen,
-        toggleSidebar,
-
-        // Selected Candidate
-        selectedIndex,
-        setSelectedIndex,
-        selectCandidate,
-
-        // History
+        quantization, setQuantization,
+        encoderQuantization, setEncoderQuantization,
+        decoderQuantization, setDecoderQuantization,
+        performanceProfile, setPerformanceProfile,
+        progress, userConfirmed, setUserConfirmed,
+        customModelId, setCustomModelId,
+        isLoadedFromCache, isInitialized,
+        showPreviewInput, setShowPreviewInput,
+        isSettingsOpen, settingsFocus, openSettings, closeSettings,
+        isSidebarOpen, toggleSidebar,
+        selectedIndex, setSelectedIndex, selectCandidate,
         loadFromHistory,
-
-        // Tab
-        activeTab,
-        setActiveTab,
-
-        // Session
-        sessionId,
-        refreshSession,
-
-        // Upload State
-        uploadPreview,
-        showUploadResult,
-        setUploadPreview,
-        setShowUploadResult,
-
-        // Inference State
+        activeTab, setActiveTab,
+        sessionId, refreshSession,
+        uploadPreview, showUploadResult, setUploadPreview, setShowUploadResult,
         activeInferenceTab,
-
-        // Custom Notification
-        customNotification,
-        setCustomNotification,
-
-        // Dialog
-        dialogConfig,
-        openDialog,
-        closeDialog,
+        customNotification, setCustomNotification,
+        dialogConfig, openDialog, closeDialog
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
